@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mir-Lunto的私人空间</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 加载指示器 -->
+    <div id="loadingIndicator" class="loading-indicator">
+        <div class="spinner"></div>
+        <p>加载中...</p>
+    </div>
+
+    <!-- 视频背景 -->
+    <div class="video-background">
+        <video autoplay muted loop id="bgVideo">
+            <source src="assets/muzimi.mp4" type="video/mp4">
+            您的浏览器不支持视频背景。
+        </video>
+        <div class="video-overlay"></div>
+    </div>
+
+    <!-- 欢迎浮窗 -->
+    <div id="welcomeOverlay" class="overlay active">
+        <div class="glass-window">
+            <div class="welcome-content">
+                <h2>欢迎回来</h2>
+                <p>来到 Mir-Lunto 的私人空间</p>
+                <button id="closeWelcome" class="close-btn">进入空间</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 搜索栏 -->
+    <div class="search-container">
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="搜索文章关键词...">
+            <button id="searchBtn">搜索</button>
+        </div>
+        <div id="searchResults" class="search-results"></div>
+    </div>
+
+    <!-- 主内容区域 -->
+    <div class="main-content">
+        <header class="main-header">
+            <h1>Mir-Lunto的私人空间</h1>
+            <nav class="main-nav">
+                <a href="#about">关于我</a>
+                <a href="#projects">项目</a>
+                <a href="#articles">文章</a>
+                <a href="#contact">联系</a>
+            </nav>
+        </header>
+        <main>
+            <section id="about" class="content-section">
+                <h2>关于 Mir-Lunto</h2>
+                <p>这里是我的个人空间，记录我的思考、项目和创作...</p>
+            </section>
+
+            <section id="projects" class="content-section">
+                <h2>我的项目</h2>
+                <div class="project-list">
+                    <div class="project-item">项目一</div>
+                    <div class="project-item">项目二</div>
+                    <div class="project-item">项目三</div>
+                </div>
+            </section>
+
+            <section id="articles" class="content-section">
+                <h2>我的文章</h2>
+                <div class="articles-list">
+                    <article class="article-item" data-tags="编程 JavaScript 前端">
+                        <h3>JavaScript 学习笔记</h3>
+                        <p>关于 JavaScript 的一些学习心得和技巧...</p>
+                    </article>
+                    <article class="article-item" data-tags="设计 UI 用户体验">
+                        <h3>现代网页设计趋势</h3>
+                        <p>探讨当前网页设计的最新趋势和发展方向...</p>
+                    </article>
+                    <article class="article-item" data-tags="生活 思考 个人成长">
+                        <h3>我的学习方法论</h3>
+                        <p>分享我个人的学习方法和效率技巧...</p>
+                    </article>
+                    <article class="article-item" data-tags="技术 后端 数据库">
+                        <h3>数据库优化实践</h3>
+                        <p>在实际项目中优化数据库性能的经验...</p>
+                    </article>
+                </div>
+            </section>
+
+            <section id="contact" class="content-section">
+                <h2>联系我</h2>
+                <p>可以通过以下方式联系我</p>
+                <p>TEL:1358501649</p>
+                <p>EMA:2979661763@qq.com</p>
+            </section>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
