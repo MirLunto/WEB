@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="style.css">
     <meta name="description" content="Mir-Lunto的个人空间，记录思考、项目和创作">
     <meta name="keywords" content="个人空间,博客,项目,前端开发">
+    <!-- 引入Supabase客户端库 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <!-- 加载指示器 -->
@@ -62,7 +64,7 @@
                 <a href="#comments">留言</a>
             </nav>
         </header>
-
+        
         <main>
             <section id="about" class="content-section">
                 <h2>关于 Mir-Lunto</h2>
@@ -86,7 +88,7 @@
                         <h3>智能评论系统</h3>
                         <p>具有完整功能的现代评论系统</p>
                         <span class="project-tag">JavaScript</span>
-                        <span class="project-tag">LocalStorage</span>
+                        <span class="project-tag">Supabase</span>
                     </div>
                     <div class="project-item">
                         <h3>视频背景优化</h3>
@@ -232,10 +234,6 @@
             </div>
             <div class="modal-body">
                 <p id="deleteConfirmText">您确定要删除这条留言吗？此操作不可撤销。</p>
-                <div class="admin-auth" id="adminAuthSection" style="display: none;">
-                    <input type="password" id="adminPassword" placeholder="管理员密码" maxlength="20">
-                    <p class="hint">请输入管理员密码以确认删除</p>
-                </div>
             </div>
             <div class="modal-footer">
                 <button id="cancelDelete" class="btn-secondary">取消</button>
@@ -244,9 +242,72 @@
         </div>
     </div>
 
+    <!-- 管理员登录模态框 -->
+    <div id="adminLoginModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>管理员登录</h3>
+                <button id="closeAdminLogin" class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 15px;">
+                    <input type="email" id="adminEmail" placeholder="管理员邮箱" 
+                           style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 8px;
+                                  border: 1px solid var(--glass-border); background: var(--secondary-bg);
+                                  color: var(--text-color);">
+                    <input type="password" id="adminPassword" placeholder="管理员密码"
+                           style="width: 100%; padding: 10px; border-radius: 8px;
+                                  border: 1px solid var(--glass-border); background: var(--secondary-bg);
+                                  color: var(--text-color);">
+                    <p id="loginError" style="color: #f44336; font-size: 0.8rem; margin-top: 5px; display: none;"></p>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button id="submitAdminLogin" class="submit-btn" style="flex: 1;">登录</button>
+                    <button id="cancelAdminLogin" class="btn-secondary" style="flex: 1;">取消</button>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 15px;">
+                    * 需要在 Supabase 控制台创建管理员账户
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 管理员操作按钮 -->
+    <div style="position: fixed; bottom: 20px; left: 20px; z-index: 1000;">
+        <button id="adminLoginBtn" class="admin-login-btn">🔐 管理员登录</button>
+        <button id="adminLogoutBtn" class="admin-logout-btn" style="display: none;">🚪 退出登录</button>
+    </div>
+
+    <!-- 管理员面板 -->
+    <div id="adminPanel" class="admin-panel" style="display: none;">
+        <h4>👑 管理员面板</h4>
+        <div class="admin-stats">
+            <div class="stat-item">
+                <div class="stat-value" id="totalCommentsStat">0</div>
+                <div class="stat-label">总留言数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="adminCommentsStat">0</div>
+                <div class="stat-label">管理员留言</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="todayCommentsStat">0</div>
+                <div class="stat-label">今日新增</div>
+            </div>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 15px;">
+            <button id="exportCommentsAdmin" class="emoji-btn" style="flex: 1;">📥 导出数据</button>
+            <button id="refreshStats" class="emoji-btn" style="flex: 1;">🔄 刷新统计</button>
+        </div>
+    </div>
+
     <!-- 通知容器 -->
     <div id="notificationContainer"></div>
 
+    <!-- JavaScript文件 -->
+    <!-- 本地文件名为 config.js / service.js 时使用它们 -->
+    <script src="config.js"></script>
+    <script src="service.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
