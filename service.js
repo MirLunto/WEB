@@ -468,19 +468,25 @@ class SupabaseService {
     }
   }
 
-  // Articles CRUD
-  async getArticles(limit = 100, offset = 0) {
+  // Articles CRUD（修改 getArticles，增加 publishedOnly 参数）
+  async getArticles(limit = 100, offset = 0, publishedOnly = true) {
     try {
-      const { data, error } = await this.client
+      let query = this.client
         .from(TABLE_NAMES.articles)
         .select('*')
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
+
+      if (publishedOnly) {
+        query = query.eq('published', true);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return { success: true, data: data || [] };
     } catch (err) {
       console.error('获取文章失败:', err);
-      return { success: false, error: err.message };
+      return { success: false, error: err?.message || err };
     }
   }
 

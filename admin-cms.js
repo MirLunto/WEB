@@ -83,6 +83,13 @@
           }
           Utils.showNotification('创建成功', 'success');
         }
+
+        // 让主页面刷新显示最新内容
+        if (window.app) {
+          if (type === 'projects' && typeof window.app.loadProjects === 'function') await window.app.loadProjects();
+          if (type === 'articles' && typeof window.app.loadArticles === 'function') await window.app.loadArticles();
+        }
+
       } catch (e) {
         console.error('保存失败', e);
         Utils.showNotification('保存失败', 'error');
@@ -98,6 +105,13 @@
       if (type === 'projects') await svc.deleteProject(id);
       else await svc.deleteArticle(id);
       Utils.showNotification('删除成功', 'success');
+
+      // 更新页面显示
+      if (window.app) {
+        if (type === 'projects' && typeof window.app.loadProjects === 'function') window.app.loadProjects();
+        if (type === 'articles' && typeof window.app.loadArticles === 'function') window.app.loadArticles();
+      }
+
       loadList(type);
     } catch (e) {
       console.error('删除失败', e);

@@ -890,6 +890,26 @@ class CommentSystem {
         this.hideAdminLoginModal();
       }
     });
+    // 绑定删除按钮：把要删除的 id 存到 deleteModal.dataset.pendingId
+    document.addEventListener('click', function (e) {
+      const btn = e.target.closest && e.target.closest('.delete-btn');
+      if (!btn) return;
+      e.preventDefault();
+      const id = btn.dataset.id || btn.dataset.commentId;
+      if (!id) {
+        console.warn('删除按钮未携带 data-id');
+        return;
+      }
+      const deleteModal = document.getElementById('deleteModal');
+      if (!deleteModal) {
+        console.warn('删除模态不存在');
+        return;
+      }
+      deleteModal.dataset.pendingId = id;
+      // 显示模态（依据你项目的显示逻辑）
+      deleteModal.style.display = 'block';
+      console.log('confirmDelete: pendingId 已设置为', id);
+    });
   }
 
   // ==================== 评论处理 ====================
@@ -1270,6 +1290,10 @@ class CommentSystem {
     const deleteModalTitle = Utils.getElement('deleteModalTitle');
     if (!deleteModal || !deleteConfirmText || !deleteModalTitle) return;
     
+    // 将 pendingId 同步到 modal dataset（确保 confirmDelete 能读取）
+    deleteModal.dataset.pendingId = String(commentId);
+    deleteModal.dataset.pendingIsReply = 'false';
+
     // 计算回复数量
     const countReplies = (replies) => {
       let count = 0;
@@ -1300,36 +1324,61 @@ class CommentSystem {
   }
 
   async confirmDelete() {
-    if (!this.pendingDeleteId) return;
-    const success = await this.deleteComment(this.pendingDeleteId);
-    if (success) {
-      Utils.showNotification('删除成功！', 'success');
-    } else {
-      Utils.showNotification('删除失败，请重试', 'error');
-    }
-    this.hideDeleteModal();
-  }
+    const deleteModal = document.getElementById('deleteModal');
+    if (!deleteModal) return;
 
-  async deleteComment(commentId) {
+    // 先尝试从 modal dataset 读取，回退到 this.pendingDeleteId
+    const pendingId = deleteModal.dataset.pendingId || this.pendingDeleteId;
+    if (!pendingId) {
+      console.warn('confirmDelete: 无待删除 id');
+      this.hideDeleteModal();
+      return;
+    }
+
+    const svc = this.supabaseService || (typeof getSupabaseService === 'function' ? getSupabaseService() : null);
+    if (!svc) {
+      console.error('Supabase 服务实例未找到，无法删除');
+      Utils && typeof Utils.showNotification === 'function' && Utils.showNotification('服务未初始化，无法删除', 'error');
+      this.hideDeleteModal();
+      return;
+    }
+
     try {
-      const comment = this.findCommentInTree(commentId);
-      if (!comment) return false;
-      // 如果是Supabase评论，从Supabase删除
-      if (this.supabaseService && this.supabaseService.isConnected) {
-        const result = await this.supabaseService.deleteComment(parseInt(commentId));
-        if (!result.success) {
-          console.error('从Supabase删除失败:', result.error);
-          Utils.showNotification('云端删除失败，仅删除本地数据', 'error');
-        }
+      // 调用后端删除
+      const result = await svc.deleteComment(Number(pendingId));
+      console.log('confirmDelete: supabase delete result =>', result);
+
+      // 处理返回值（稳健判断）
+      if (!result) {
+        console.info('confirmDelete: 后端返回空，假定删除成功');
+        Utils && typeof Utils.showNotification === 'function' && Utils.showNotification('删除成功', 'success');
+      } else if (result.error) {
+        console.error('从Supabase删除失败:', result.error);
+        const msg = result.error.message || JSON.stringify(result.error);
+        Utils && typeof Utils.showNotification === 'function' && Utils.showNotification(`删除失败: ${msg}`, 'error');
+        this.hideDeleteModal();
+        return;
+      } else {
+        Utils && typeof Utils.showNotification === 'function' && Utils.showNotification('删除成功', 'success');
       }
-      // 从本地删除
-      this.deleteCommentFromTree(commentId);
-      this.saveToCache();
-      this.renderComments();
-      return true;
-    } catch (error) {
-      console.error('删除评论时出错:', error);
-      return false;
+
+      // 从本地树删除（本地状态同步）
+      this.deleteCommentFromTree(pendingId);
+      // 重新渲染或从后端刷新（优先从后端刷新）
+      if (typeof this.loadComments === 'function') {
+        await this.loadComments();
+      } else {
+        this.renderComments();
+      }
+    } catch (err) {
+      console.error('confirmDelete 异常:', err);
+      Utils && typeof Utils.showNotification === 'function' && Utils.showNotification('删除时发生异常', 'error');
+    } finally {
+      // 清理并关闭模态（同步两处状态）
+      delete deleteModal.dataset.pendingId;
+      delete deleteModal.dataset.pendingIsReply;
+      this.pendingDeleteId = null;
+      this.hideDeleteModal();
     }
   }
 
@@ -2005,6 +2054,57 @@ class App {
       document.head.appendChild(style);
     }
   }
+
+  // 从 Supabase 加载项目并渲染到页面（覆盖静态项）
+  async loadProjects() {
+    try {
+      const svc = this.supabaseService || (typeof getSupabaseService === 'function' ? getSupabaseService() : null);
+      const container = document.querySelector('.project-list');
+      if (!container || !svc) return;
+      const res = await svc.getProjects();
+      if (res && res.success) {
+        container.innerHTML = res.data.map(p => `
+          <div class="project-item" data-id="${p.id}">
+            <h3>${Utils.escapeHtml(p.title || '无标题')}</h3>
+            <p>${Utils.escapeHtml(p.description || '')}</p>
+            ${p.tags ? `<span class="project-tag">${Utils.escapeHtml(p.tags)}</span>` : ''}
+            ${p.link ? `<a class="project-link" href="${Utils.escapeHtml(p.link)}" target="_blank" rel="noopener">查看</a>` : ''}
+          </div>
+        `).join('');
+      } else {
+        // 保持现有静态内容或显示空
+        console.warn('loadProjects: 无数据或获取失败', res && res.error);
+      }
+    } catch (err) {
+      console.error('loadProjects 异常:', err);
+    }
+  }
+
+  // 从 Supabase 加载文章并渲染到页面（仅显示已发布）
+  async loadArticles() {
+    try {
+      const svc = this.supabaseService || (typeof getSupabaseService === 'function' ? getSupabaseService() : null);
+      const container = document.querySelector('.articles-list');
+      if (!container || !svc) return;
+      const res = await svc.getArticles(100, 0, true); // 仅拉取 published = true
+      if (res && res.success) {
+        container.innerHTML = res.data.map(a => `
+          <article class="article-item" data-id="${a.id}" data-tags="${Utils.escapeHtml(a.tags || '')}">
+            <h3>${Utils.escapeHtml(a.title || '无标题')}</h3>
+            <p>${Utils.escapeHtml((a.excerpt || a.content || '').slice(0, 180))}${(a.content||'').length>180? '...':''}</p>
+            <div class="article-meta">
+              <span class="article-date">${new Date(a.created_at).toLocaleDateString()}</span>
+              <span class="article-tags">${Utils.escapeHtml(a.tags || '')}</span>
+            </div>
+          </article>
+        `).join('');
+      } else {
+        console.warn('loadArticles: 无数据或获取失败', res && res.error);
+      }
+    } catch (err) {
+      console.error('loadArticles 异常:', err);
+    }
+  }
 }
 
 // ============================================================================
@@ -2044,6 +2144,8 @@ window.addEventListener('load', function() {
 // 页面关闭前保存数据
 window.addEventListener('beforeunload', function(e) {
   // 可以在这里添加数据保存逻辑
+
+
 
 });
 
