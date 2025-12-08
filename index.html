@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <meta name="description" content="Mir-Lunto的个人空间，记录思考、项目和创作">
     <meta name="keywords" content="个人空间,博客,项目,前端开发">
-    <!-- 引入Supabase客户端库 -->
+    <!-- 引入Supabase客户端库（修正 URL） -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -20,7 +20,7 @@
     <!-- 视频背景 -->
     <div class="video-background">
         <video autoplay muted loop id="bgVideo">
-            <source src="assets/muzimi.mp4" type="video/mp4">
+            <source src="assets/fufu.mp4" type="video/mp4">
             您的浏览器不支持视频背景。
         </video>
         <div class="video-overlay"></div>
@@ -280,8 +280,16 @@
 
     <!-- 管理员面板 -->
     <div id="adminPanel" class="admin-panel" style="display: none;">
-        <h4>👑 管理员面板</h4>
-        <div class="admin-stats">
+      <h4>👑 管理员面板</h4>
+      <!-- 管理内容编辑器 -->
+      <div id="adminContentEditor">
+        <div style="margin-bottom:12px;">
+          <button id="openProjectsEditor" class="emoji-btn">管理项目</button>
+          <button id="openArticlesEditor" class="emoji-btn">管理文章</button>
+        </div>
+        <div id="cmsEditorArea"></div>
+      </div>
+      <div class="admin-stats">
             <div class="stat-item">
                 <div class="stat-value" id="totalCommentsStat">0</div>
                 <div class="stat-label">总留言数</div>
@@ -304,10 +312,10 @@
     <!-- 通知容器 -->
     <div id="notificationContainer"></div>
 
-    <!-- JavaScript文件 -->
-    <!-- 本地文件名为 config.js / service.js 时使用它们 -->
+    <!-- JavaScript文件：顺序重要 -->
     <script src="config.js"></script>
     <script src="service.js"></script>
     <script src="script.js"></script>
+    <script src="admin-cms.js"></script>
 </body>
 </html>

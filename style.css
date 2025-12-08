@@ -948,6 +948,34 @@ body {
     background: rgba(255, 255, 255, 0.03);
     border-color: rgba(255, 255, 255, 0.1);
 }
+/* 在原有 .comment-replies 样式后添加 */
+.comment-nested {
+  border-left: 2px solid var(--glass-border);
+  padding-left: 20px;
+  margin-top: 15px;
+  transition: var(--transition);
+}
+
+.comment-nested:hover {
+  border-left-color: var(--accent-color);
+}
+
+/* 限制最大缩进 */
+.comment[data-depth="5"] {
+  margin-left: 150px !important;
+}
+
+/* 移动端调整 */
+@media (max-width: 768px) {
+  .comment-nested {
+    margin-left: 10px !important;
+    padding-left: 10px;
+  }
+  
+  .comment[data-depth] {
+    margin-left: 10px !important;
+  }
+}
 
 /* 表情选择器 */
 .emoji-picker {

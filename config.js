@@ -9,7 +9,9 @@ const SUPABASE_CONFIG = {
 // 表名常量
 const TABLE_NAMES = {
   guestbook: 'guestbook',
-  admins: 'admins'
+  admins: 'admins',
+  projects: 'projects',
+  articles: 'articles'
 };
 
 // 初始化Supabase客户端

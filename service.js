@@ -5,7 +5,12 @@ class SupabaseService {
     this.user = null;
     this.isAdmin = false;
     this.isConnected = false;
-    this.init();
+    // 只有在 client 初始化成功时才继续初始化
+    if (this.client) {
+      this.init();
+    } else {
+      console.warn('Supabase client 未初始化，已跳过服务初始化');
+    }
   }
 
   async init() {
@@ -128,36 +133,38 @@ class SupabaseService {
     }
   }
 
-  // 管理员登录
+  // 管理员登录（增强日志，返回完整信息）
   async adminLogin(email, password) {
     try {
-      const { data, error } = await this.client.auth.signInWithPassword({
+      const res = await this.client.auth.signInWithPassword({
         email: email,
         password: password
       });
 
-      if (error) {
-        console.error('管理员登录失败:', error.message);
-        return { 
-          success: false, 
-          error: error.message 
-        };
+      // signInWithPassword 返回 { data, error }
+      if (res.error) {
+        console.error('管理员登录失败（auth）:', res.error);
+        return { success: false, error: res.error };
       }
 
-      this.user = data.user;
+      // ensure session/user present
+      const session = res.data?.session ?? null;
+      const user = res.data?.user ?? null;
+      if (!user) {
+        console.warn('管理员登录没有返回 user 对象', res);
+        return { success: false, error: { message: '未返回用户信息', raw: res } };
+      }
+
+      this.user = user;
+      // 记录 user id 以便手动在 Supabase 检查 admins 表
+      console.log('登录成功，user id:', user.id, 'email:', user.email);
+
       await this.checkAdminStatus();
 
-      return { 
-        success: true, 
-        user: data.user, 
-        isAdmin: this.isAdmin 
-      };
+      return { success: true, user, isAdmin: this.isAdmin, session };
     } catch (error) {
       console.error('管理员登录异常:', error);
-      return { 
-        success: false, 
-        error: '登录过程中发生错误' 
-      };
+      return { success: false, error };
     }
   }
 
@@ -396,6 +403,130 @@ class SupabaseService {
     } catch (error) {
       console.error('获取统计数据失败:', error);
       return { success: false, error: error.message };
+    }
+  }
+
+  // 获取项目列表
+  async getProjects(limit = 100, offset = 0) {
+    try {
+      const { data, error } = await this.client
+        .from(TABLE_NAMES.projects)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw error;
+      return { success: true, data: data || [] };
+    } catch (err) {
+      console.error('获取项目失败:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  async addProject(payload) {
+    try {
+      const { data, error } = await this.client
+        .from(TABLE_NAMES.projects)
+        .insert([payload])
+        .select()
+        .single();
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err) {
+      console.error('添加项目失败:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  async updateProject(id, patch) {
+    try {
+      const { data, error } = await this.client
+        .from(TABLE_NAMES.projects)
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq('id', Number(id))
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err) {
+      console.error('更新项目失败:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  async deleteProject(id) {
+    try {
+      const { data, error } = await this.client
+        .from(TABLE_NAMES.projects)
+        .delete()
+        .eq('id', Number(id))
+        .select();
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err) {
+      console.error('删除项目失败:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  // Articles CRUD
+  async getArticles(limit = 100, offset = 0) {
+    try {
+      const { data, error } = await this.client
+        .from(TABLE_NAMES.articles)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw error;
+      return { success: true, data: data || [] };
+    } catch (err) {
+      console.error('获取文章失败:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  async addArticle(payload) {
+    try {
+      const { data, error } = await this.client
+        .from(TABLE_NAMES.articles)
+        .insert([payload])
+        .select()
+        .single();
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err) {
+      console.error('添加文章失败:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  async updateArticle(id, patch) {
+    try {
+      const { data, error } = await this.client
+        .from(TABLE_NAMES.articles)
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq('id', Number(id))
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err) {
+      console.error('更新文章失败:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  async deleteArticle(id) {
+    try {
+      const { data, error } = await this.client
+        .from(TABLE_NAMES.articles)
+        .delete()
+        .eq('id', Number(id))
+        .select();
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err) {
+      console.error('删除文章失败:', err);
+      return { success: false, error: err.message };
     }
   }
 }

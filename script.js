@@ -1,6 +1,6 @@
 /**
  * Mir-Lunto 个人空间 - 主JavaScript文件
- * 版本: 3.0.0 (集成Supabase)
+ * 版本: 4.0.0 (支持多层嵌套评论)
  * 最后更新: 2024-01-20
  */
 
@@ -17,11 +17,12 @@ const CONFIG = {
   MAX_COMMENT_LENGTH: 500,
   MAX_USERNAME_LENGTH: 20,
   COMMENTS_PER_PAGE: 10,
+  MAX_NESTING_DEPTH: 5, // 新增：最大嵌套层数
   
   // 本地存储键名
   STORAGE_KEYS: {
-    COMMENTS_CACHE: 'comments-cache-v6',
-    COMMENTS_TIMESTAMP: 'comments-cache-time-v2',
+    COMMENTS_CACHE: 'comments-cache-v7',
+    COMMENTS_TIMESTAMP: 'comments-cache-time-v3',
     WELCOME_SHOWN: 'welcomeShown-v2',
     PERFORMANCE_DATA: 'mir-lunto-perf-v2',
     USER_SETTINGS: 'user-settings-v2'
@@ -173,241 +174,236 @@ class Utils {
 // ============================================================================
 // 性能监控
 // ============================================================================
-
 class PerformanceMonitor {
-    constructor() {
-        this.metrics = {};
-        this.startTime = performance.now();
-        this.init();
-    }
+  constructor() {
+    this.metrics = {};
+    this.startTime = performance.now();
+    this.init();
+  }
 
-    init() {
-        this.recordNavigationTiming();
-        this.recordResourceTiming();
-        this.setupPerformanceObserver();
-        this.setupUserTiming();
-    }
+  init() {
+    this.recordNavigationTiming();
+    this.recordResourceTiming();
+    this.setupPerformanceObserver();
+    this.setupUserTiming();
+  }
 
-    recordNavigationTiming() {
-        if (performance.getEntriesByType) {
-            const navigation = performance.getEntriesByType('navigation')[0];
-            if (navigation) {
-                this.metrics.pageLoad = navigation.loadEventEnd - navigation.fetchStart;
-                this.metrics.domContentLoaded = navigation.domContentLoadedEventEnd - navigation.fetchStart;
-                this.metrics.firstByte = navigation.responseStart - navigation.requestStart;
-            }
+  recordNavigationTiming() {
+    if (performance.getEntriesByType) {
+      const navigation = performance.getEntriesByType('navigation')[0];
+      if (navigation) {
+        this.metrics.pageLoad = navigation.loadEventEnd - navigation.fetchStart;
+        this.metrics.domContentLoaded = navigation.domContentLoadedEventEnd - navigation.fetchStart;
+        this.metrics.firstByte = navigation.responseStart - navigation.requestStart;
+      }
+    }
+  }
+
+  recordResourceTiming() {
+    if (performance.getEntriesByType) {
+      const resources = performance.getEntriesByType('resource');
+      resources.forEach(resource => {
+        if (resource.name.includes('.css') || resource.name.includes('.js')) {
+          this.metrics[resource.name] = resource.duration;
         }
+      });
     }
+  }
 
-    recordResourceTiming() {
-        if (performance.getEntriesByType) {
-            const resources = performance.getEntriesByType('resource');
-            resources.forEach(resource => {
-                if (resource.name.includes('.css') || resource.name.includes('.js')) {
-                    this.metrics[resource.name] = resource.duration;
-                }
-            });
-        }
-    }
-
-    setupPerformanceObserver() {
-        if ('PerformanceObserver' in window) {
-            // 观察绘制性能
-            const paintObserver = new PerformanceObserver((list) => {
-                list.getEntries().forEach(entry => {
-                    if (entry.entryType === 'paint') {
-                        this.metrics[entry.name] = entry.startTime;
-                    }
-                });
-            });
-            
-            try {
-                paintObserver.observe({ entryTypes: ['paint'] });
-            } catch (e) {
-                console.log('Paint观察器初始化失败:', e);
-            }
-
-            // 观察长任务
-            const longTaskObserver = new PerformanceObserver((list) => {
-                list.getEntries().forEach(entry => {
-                    console.log('长任务检测:', entry.duration);
-                });
-            });
-
-            try {
-                longTaskObserver.observe({ entryTypes: ['longtask'] });
-            } catch (e) {
-                console.log('长任务观察器初始化失败:', e);
-            }
-        }
-    }
-
-    setupUserTiming() {
-        // 自定义性能标记
-        performance.mark('app_initialized');
-        
-        // 监听页面可见性变化
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-                this.metrics.timeOnPage = performance.now() - this.startTime;
-            }
+  setupPerformanceObserver() {
+    if ('PerformanceObserver' in window) {
+      // 观察绘制性能
+      const paintObserver = new PerformanceObserver((list) => {
+        list.getEntries().forEach(entry => {
+          if (entry.entryType === 'paint') {
+            this.metrics[entry.name] = entry.startTime;
+          }
         });
-    }
-
-    report() {
-        const totalLoad = performance.now() - this.startTime;
-        this.metrics.totalLoad = totalLoad;
-        
-        // 记录到控制台
-        console.group('🎯 性能指标');
-        Object.entries(this.metrics).forEach(([key, value]) => {
-            console.log(`${key}: ${value.toFixed(2)}ms`);
+      });
+      
+      try {
+        paintObserver.observe({ entryTypes: ['paint'] });
+      } catch (e) {
+        console.log('Paint观察器初始化失败:', e);
+      }
+      // 观察长任务
+      const longTaskObserver = new PerformanceObserver((list) => {
+        list.getEntries().forEach(entry => {
+          console.log('长任务检测:', entry.duration);
         });
-        console.groupEnd();
-        
-        // 保存到本地存储
-        this.saveToLocalStorage();
-        
-        // 发送到分析服务（可选）
-        this.sendToAnalytics();
+      });
+      try {
+        longTaskObserver.observe({ entryTypes: ['longtask'] });
+      } catch (e) {
+        console.log('长任务观察器初始化失败:', e);
+      }
     }
+  }
 
-    saveToLocalStorage() {
-        try {
-            const perfHistory = JSON.parse(
-                localStorage.getItem(CONFIG.STORAGE_KEYS.PERFORMANCE_DATA) || '[]'
-            );
-            
-            perfHistory.push({
-                timestamp: new Date().toISOString(),
-                metrics: this.metrics,
-                url: window.location.href,
-                userAgent: navigator.userAgent
-            });
-            
-            // 只保留最近50条记录
-            if (perfHistory.length > 50) {
-                perfHistory.shift();
-            }
-            
-            localStorage.setItem(
-                CONFIG.STORAGE_KEYS.PERFORMANCE_DATA,
-                JSON.stringify(perfHistory)
-            );
-        } catch (error) {
-            console.log('性能数据保存失败:', error);
-        }
-    }
+  setupUserTiming() {
+    // 自定义性能标记
+    performance.mark('app_initialized');
+    
+    // 监听页面可见性变化
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        this.metrics.timeOnPage = performance.now() - this.startTime;
+      }
+    });
+  }
 
-    sendToAnalytics() {
-        // 这里可以集成Google Analytics或其他分析服务
-        console.log('📊 性能监控数据已记录');
+  report() {
+    const totalLoad = performance.now() - this.startTime;
+    this.metrics.totalLoad = totalLoad;
+    
+    // 记录到控制台
+    console.group('🎯 性能指标');
+    Object.entries(this.metrics).forEach(([key, value]) => {
+      console.log(`${key}: ${value.toFixed(2)}ms`);
+    });
+    console.groupEnd();
+    
+    // 保存到本地存储
+    this.saveToLocalStorage();
+    
+    // 发送到分析服务（可选）
+    this.sendToAnalytics();
+  }
+
+  saveToLocalStorage() {
+    try {
+      const perfHistory = JSON.parse(
+        localStorage.getItem(CONFIG.STORAGE_KEYS.PERFORMANCE_DATA) || '[]'
+      );
+      
+      perfHistory.push({
+        timestamp: new Date().toISOString(),
+        metrics: this.metrics,
+        url: window.location.href,
+        userAgent: navigator.userAgent
+      });
+      
+      // 只保留最近50条记录
+      if (perfHistory.length > 50) {
+        perfHistory.shift();
+      }
+      
+      localStorage.setItem(
+        CONFIG.STORAGE_KEYS.PERFORMANCE_DATA,
+        JSON.stringify(perfHistory)
+      );
+    } catch (error) {
+      console.log('性能数据保存失败:', error);
     }
+  }
+
+  sendToAnalytics() {
+    // 这里可以集成Google Analytics或其他分析服务
+    console.log('📊 性能监控数据已记录');
+  }
 }
 
 // ============================================================================
 // 视频优化器
 // ============================================================================
-
 class VideoOptimizer {
-    constructor() {
-        this.video = Utils.getElement('bgVideo');
-        this.init();
-    }
+  constructor() {
+    this.video = Utils.getElement('bgVideo');
+    this.init();
+  }
 
-    init() {
-        if (!this.video) {
-            this.useStaticBackground();
-            return;
-        }
-        
-        if (this.isSlowNetwork()) {
-            this.useStaticBackground();
-            return;
-        }
-        
-        this.optimizeVideoLoading();
-        this.setupVideoEvents();
+  init() {
+    if (!this.video) {
+      this.useStaticBackground();
+      return;
     }
+    
+    if (this.isSlowNetwork()) {
+      this.useStaticBackground();
+      return;
+    }
+    
+    this.optimizeVideoLoading();
+    this.setupVideoEvents();
+  }
 
-    isSlowNetwork() {
-        // 检测网络状况
-        const connection = navigator.connection || 
-                          navigator.mozConnection || 
-                          navigator.webkitConnection;
-        
-        if (!connection) return false;
-        
-        const effectiveType = connection.effectiveType || '';
-        const saveData = connection.saveData || false;
-        
-        // 如果是2G/3G网络或开启了省流量模式，使用静态背景
-        return saveData || 
-               effectiveType.includes('2g') || 
-               effectiveType.includes('3g') ||
-               effectiveType === 'slow-2g';
-    }
+  isSlowNetwork() {
+    // 检测网络状况
+    const connection = navigator.connection ||
+                      navigator.mozConnection ||
+                      navigator.webkitConnection;
+    
+    if (!connection) return false;
+    
+    const effectiveType = connection.effectiveType || '';
+    const saveData = connection.saveData || false;
+    
+    // 如果是2G/3G网络或开启了省流量模式，使用静态背景
+    return saveData ||
+           effectiveType.includes('2g') ||
+           effectiveType.includes('3g') ||
+           effectiveType === 'slow-2g';
+  }
 
-    useStaticBackground() {
-        const videoContainer = document.querySelector('.video-background');
-        if (!videoContainer) return;
-        
-        videoContainer.innerHTML = `
-            <div class="static-background"></div>
-            <div class="video-overlay"></div>
-        `;
-        
-        Utils.showNotification('已优化为静态背景以适应您的网络环境', 'info');
-    }
+  useStaticBackground() {
+    const videoContainer = document.querySelector('.video-background');
+    if (!videoContainer) return;
+    
+    videoContainer.innerHTML = `
+      <div class="static-background"></div>
+      <div class="video-overlay"></div>
+    `;
+    
+    Utils.showNotification('已优化为静态背景以适应您的网络环境', 'info');
+  }
 
-    optimizeVideoLoading() {
-        if (!this.video) return;
-        
-        // 优化视频加载
-        this.video.preload = 'metadata';
-        this.video.setAttribute('playsinline', '');
-        this.video.setAttribute('webkit-playsinline', '');
-        
-        // 设置视频源
-        const sources = this.video.querySelectorAll('source');
-        sources.forEach(source => {
-            source.setAttribute('type', source.getAttribute('type') || 'video/mp4');
-        });
-    }
+  optimizeVideoLoading() {
+    if (!this.video) return;
+    
+    // 优化视频加载
+    this.video.preload = 'metadata';
+    this.video.setAttribute('playsinline', '');
+    this.video.setAttribute('webkit-playsinline', '');
+    
+    // 设置视频源
+    const sources = this.video.querySelectorAll('source');
+    sources.forEach(source => {
+      source.setAttribute('type', source.getAttribute('type') || 'video/mp4');
+    });
+  }
 
-    setupVideoEvents() {
-        if (!this.video) return;
-        
-        this.video.addEventListener('loadstart', () => {
-            console.log('视频开始加载');
-        });
-        
-        this.video.addEventListener('canplay', () => {
-            console.log('视频可以播放');
-            this.video.play().catch(e => {
-                console.log('视频自动播放被阻止:', e);
-            });
-        });
-        
-        this.video.addEventListener('error', (e) => {
-            console.error('视频加载失败:', e);
-            this.useStaticBackground();
-        });
-        
-        this.video.addEventListener('waiting', () => {
-            console.log('视频缓冲中...');
-        });
-        
-        this.video.addEventListener('playing', () => {
-            console.log('视频开始播放');
-        });
-    }
+  setupVideoEvents() {
+    if (!this.video) return;
+    
+    this.video.addEventListener('loadstart', () => {
+      console.log('视频开始加载');
+    });
+    
+    this.video.addEventListener('canplay', () => {
+      console.log('视频可以播放');
+      this.video.play().catch(e => {
+        console.log('视频自动播放被阻止:', e);
+      });
+    });
+    
+    this.video.addEventListener('error', (e) => {
+      console.error('视频加载失败:', e);
+      this.useStaticBackground();
+    });
+    
+    this.video.addEventListener('waiting', () => {
+      console.log('视频缓冲中...');
+    });
+    
+    this.video.addEventListener('playing', () => {
+      console.log('视频开始播放');
+    });
+  }
 }
 
 // ============================================================================
 // 搜索引擎
 // ============================================================================
-
 class SearchEngine {
   constructor() {
     this.searchData = [];
@@ -425,7 +421,6 @@ class SearchEngine {
   collectSearchData() {
     const selectors = 'h1, h2, h3, h4, h5, h6, p, article, section, .article-item, .project-item';
     const contentElements = document.querySelectorAll(selectors);
-
     this.searchData = Array.from(contentElements)
       .filter(el => {
         const text = el.textContent.trim();
@@ -441,7 +436,6 @@ class SearchEngine {
         className: el.className || '',
         dataTags: el.dataset.tags || ''
       }));
-
     console.log(`已索引 ${this.searchData.length} 个内容元素`);
   }
 
@@ -449,14 +443,11 @@ class SearchEngine {
     const searchInput = Utils.getElement('searchInput');
     const searchBtn = Utils.getElement('searchBtn');
     const searchContainer = document.querySelector('.search-container');
-
     if (!searchInput) return;
-
     // 输入事件 - 防抖处理
     searchInput.addEventListener('input', Utils.debounce((e) => {
       this.handleSearchInput(e.target.value);
     }, CONFIG.DEBOUNCE_DELAY));
-
     // 回车搜索
     searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -464,14 +455,12 @@ class SearchEngine {
         this.performSearch(searchInput.value);
       }
     });
-
     // 搜索按钮点击
     if (searchBtn) {
       searchBtn.addEventListener('click', () => {
         this.performSearch(searchInput.value);
       });
     }
-
     // 点击外部关闭搜索结果
     document.addEventListener('click', (e) => {
       if (!searchContainer || !searchContainer.contains(e.target)) {
@@ -491,7 +480,6 @@ class SearchEngine {
           searchInput.select();
         }
       }
-
       // ESC 关闭搜索结果
       if (e.key === 'Escape') {
         this.closeSearchResults();
@@ -505,26 +493,22 @@ class SearchEngine {
     this.currentQuery = query.trim();
     const suggestions = Utils.getElement('searchSuggestions');
     if (!suggestions) return;
-
     if (this.currentQuery.length < 2) {
       suggestions.style.display = 'none';
       return;
     }
-
     const matches = this.searchData
       .filter(item =>
         item.text.toLowerCase().includes(this.currentQuery.toLowerCase()) ||
         item.dataTags.toLowerCase().includes(this.currentQuery.toLowerCase())
       )
       .slice(0, 8);
-
     this.showSuggestions(matches);
   }
 
   showSuggestions(matches) {
     const suggestions = Utils.getElement('searchSuggestions');
     if (!suggestions) return;
-
     if (matches.length === 0) {
       suggestions.innerHTML = `
         <div class="search-suggestion-item">
@@ -534,7 +518,6 @@ class SearchEngine {
       suggestions.style.display = 'block';
       return;
     }
-
     suggestions.innerHTML = matches
       .map(match => `
         <div class="search-suggestion-item" data-text="${Utils.escapeHtml(match.text)}">
@@ -546,9 +529,7 @@ class SearchEngine {
         </div>
       `)
       .join('');
-
     suggestions.style.display = 'block';
-
     // 添加点击事件
     suggestions.querySelectorAll('.search-suggestion-item').forEach(item => {
       item.addEventListener('click', () => {
@@ -571,7 +552,6 @@ class SearchEngine {
       item.text.toLowerCase().includes(this.currentQuery.toLowerCase()) ||
       item.dataTags.toLowerCase().includes(this.currentQuery.toLowerCase())
     );
-
     this.showSearchResults(matches);
     this.isSearching = false;
     this.saveSearchHistory(query);
@@ -580,7 +560,6 @@ class SearchEngine {
   showSearchResults(matches) {
     const resultsContent = Utils.getElement('searchResults');
     if (!resultsContent) return;
-
     if (matches.length === 0) {
       resultsContent.innerHTML = `
         <div class="no-results">
@@ -601,7 +580,6 @@ class SearchEngine {
           </div>
         `)
         .join('');
-
       // 添加点击事件
       resultsContent.querySelectorAll('.result-item').forEach(item => {
         item.addEventListener('click', () => {
@@ -621,9 +599,7 @@ class SearchEngine {
         });
       });
     }
-
     resultsContent.classList.add('active');
-
     // 添加高亮动画样式
     if (!document.querySelector('style#highlight-animation')) {
       const style = document.createElement('style');
@@ -654,7 +630,6 @@ class SearchEngine {
       const searchHistory = JSON.parse(
         localStorage.getItem('search-history') || '[]'
       );
-
       if (!searchHistory.includes(query)) {
         searchHistory.unshift(query);
         if (searchHistory.length > 20) {
@@ -684,17 +659,17 @@ class SearchEngine {
 }
 
 // ============================================================================
-// 评论系统
+// 评论系统（支持多层嵌套）
 // ============================================================================
-
 class CommentSystem {
   constructor() {
     this.comments = [];
+    this.commentsTree = []; // 树形结构
     this.currentReplyTo = null;
     this.pendingDeleteId = null;
     this.pendingDeleteIsReply = false;
     this.supabaseService = getSupabaseService();
-    this.cacheKey = CONFIG.STORAGE_KEYS.COMMENTS_CACHE;
+    // 不使用本地示例/缓存，仍初始化组件并加载后端数据
     this.init();
   }
 
@@ -704,28 +679,89 @@ class CommentSystem {
     this.initEmojiPicker();
   }
 
-  // 数据管理
+  // ==================== 数据管理 ====================
+  /**
+   * 将扁平数据转换为树形结构（新增方法）
+   */
+  buildCommentTree(flatComments) {
+    const commentMap = new Map();
+    const rootComments = [];
+
+    // 先建立 map（用 String(id) 作为键，防止类型不一致）
+    flatComments.forEach(comment => {
+      const key = String(comment.id);
+      commentMap.set(key, {
+        ...comment,
+        // 保留原 id 类型，但在 map 中用字符串键索引
+        depth: 0,
+        replies: comment.replies && Array.isArray(comment.replies) ? comment.replies.slice() : []
+      });
+    });
+
+    // 构建树结构
+    flatComments.forEach(comment => {
+      const key = String(comment.id);
+      const parentKey = comment.parent_id === null || comment.parent_id === undefined ? null : String(comment.parent_id);
+      const node = commentMap.get(key);
+      if (!node) return;
+      if (parentKey && commentMap.has(parentKey)) {
+        const parent = commentMap.get(parentKey);
+        node.depth = (parent.depth || 0) + 1;
+        if (node.depth <= CONFIG.MAX_NESTING_DEPTH) {
+          parent.replies.push(node);
+        } else {
+          // 超出深度限制时当作根节点处理
+          rootComments.push(node);
+        }
+      } else {
+        rootComments.push(node);
+      }
+    });
+
+    // 递归排序（按时间降序：新发布的在上）
+    const sortComments = (comments) => {
+      comments.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      comments.forEach(c => {
+        if (c.replies && c.replies.length) sortComments(c.replies);
+      });
+    };
+    sortComments(rootComments);
+    
+    return rootComments;
+  }
+
   async loadComments() {
     // 显示加载状态
     const container = Utils.getElement('commentsContainer');
     if (container) {
       container.innerHTML = '<div class="loading-comments">加载留言中...</div>';
     }
-
     try {
       // 尝试从Supabase加载
       if (this.supabaseService && this.supabaseService.isConnected) {
         const result = await this.supabaseService.getComments();
         
-        if (result.success) {
-          console.log('从Supabase加载评论:', result.data.length, '条');
-          this.comments = this.transformSupabaseData(result.data);
+        if (result.success && Array.isArray(result.data)) {
+          // 统一数据格式，避免 id 类型/字段名差异造成匹配失败
+          this.comments = result.data.map(r => ({
+            // 保留原字段并做容错
+            id: r.id,
+            parent_id: r.parent_id === undefined ? null : r.parent_id,
+            created_at: r.created_at || r.timestamp || new Date().toISOString(),
+            content: r.content || r.body || '',
+            author: r.author || r.name || '匿名',
+            likes: Number(r.likes) || 0,
+            device: r.device || '',
+            is_admin: !!r.is_admin,
+            // 如果需要后续同步到 supabase，保留原 id
+            supabase_id: r.id
+          }));
+          this.commentsTree = this.buildCommentTree(this.comments);
           this.saveToCache();
           this.renderComments();
           return;
         }
       }
-
       // 如果Supabase失败，尝试从缓存加载
       console.log('Supabase连接失败，尝试从缓存加载');
       this.loadFromCache();
@@ -736,23 +772,6 @@ class CommentSystem {
     }
   }
 
-  transformSupabaseData(supabaseData) {
-    return supabaseData.map(item => ({
-      id: item.id.toString(),
-      author: item.author || '匿名用户',
-      email: item.email || '',
-      content: item.content || '',
-      timestamp: item.created_at || new Date().toISOString(),
-      likes: item.likes || 0,
-      replies: [], // 暂时不支持嵌套回复
-      device: item.device || '',
-      mood: item.mood || '😊',
-      supabase_id: item.id,
-      local: false,
-      isAdmin: item.is_admin || false
-    }));
-  }
-
   shouldUseCache() {
     const cacheTime = localStorage.getItem(CONFIG.STORAGE_KEYS.COMMENTS_TIMESTAMP);
     if (!cacheTime) return false;
@@ -760,150 +779,86 @@ class CommentSystem {
   }
 
   loadFromCache() {
-    try {
-      const cached = localStorage.getItem(this.cacheKey);
-      if (cached) {
-        this.comments = JSON.parse(cached);
-        console.log(`从缓存加载 ${this.comments.length} 条评论`);
-        this.renderComments();
-      } else {
-        // 初始化示例评论
-        this.comments = this.getInitialComments();
-        this.renderComments();
-      }
-    } catch (error) {
-      console.error('缓存加载失败:', error);
-      this.comments = this.getInitialComments();
-      this.renderComments();
-    }
+    // 已移除本地示例与缓存逻辑，故直接显示空列表（或等待后端加载）
+    this.comments = [];
+    this.commentsTree = [];
+    this.renderComments();
   }
 
   getInitialComments() {
-    return [
-      {
-        id: Utils.generateId(),
-        author: 'Mir-Lunto',
-        email: '',
-        content: '欢迎来到我的个人空间！这里记录了我的学习历程、项目经验和生活思考。\n\n欢迎大家留言交流，分享想法！🎉',
-        timestamp: new Date().toISOString(),
-        likes: 8,
-        replies: [],
-        device: '电脑 · Chrome',
-        isAdmin: true
-      },
-      {
-        id: Utils.generateId(),
-        author: '访客',
-        email: '',
-        content: '网站设计得真漂亮！特别喜欢这个玻璃态效果和动画。👍',
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-        likes: 3,
-        replies: [
-          {
-            id: Utils.generateId(),
-            author: 'Mir-Lunto',
-            email: '',
-            content: '谢谢喜欢！我会继续改进的。',
-            timestamp: new Date(Date.now() - 1800000).toISOString(),
-            likes: 1,
-            device: '电脑 · Chrome',
-            isAdmin: true
-          }
-        ],
-        device: '手机 · Safari'
-      }
-    ];
+    // 移除内置示例数据；后端 Supabase 为唯一数据源
+    return [];
   }
 
   saveToCache() {
-    try {
-      localStorage.setItem(this.cacheKey, JSON.stringify(this.comments));
-      localStorage.setItem(CONFIG.STORAGE_KEYS.COMMENTS_TIMESTAMP, Date.now().toString());
-    } catch (error) {
-      console.error('缓存保存失败:', error);
-    }
+    // 不再使用本地缓存，故空实现以免其他代码调用报错
+    return;
   }
 
-  // 事件处理
+  // ==================== 事件处理 ====================
   setupEventListeners() {
     // 评论表单提交
     const commentForm = Utils.getElement('commentForm');
     if (commentForm) {
       commentForm.addEventListener('submit', (e) => this.handleCommentSubmit(e));
     }
-
     // 表情按钮
     const emojiBtn = Utils.getElement('emojiBtn');
     if (emojiBtn) {
       emojiBtn.addEventListener('click', () => this.toggleEmojiModal());
     }
-
     // 同步按钮
     const syncBtn = Utils.getElement('syncComments');
     if (syncBtn) {
       syncBtn.addEventListener('click', () => this.syncToSupabase());
     }
-
     // 导出按钮
     const exportBtn = Utils.getElement('exportComments');
     if (exportBtn) {
       exportBtn.addEventListener('click', () => this.exportComments());
     }
-
     // 取消回复
     const cancelReply = Utils.getElement('cancelReply');
     if (cancelReply) {
       cancelReply.addEventListener('click', () => this.cancelReply());
     }
-
     // 删除模态框相关
     const cancelDelete = Utils.getElement('cancelDelete');
     const confirmDelete = Utils.getElement('confirmDelete');
     const closeDeleteModal = Utils.getElement('closeDeleteModal');
-
     if (cancelDelete) cancelDelete.addEventListener('click', () => this.hideDeleteModal());
     if (confirmDelete) confirmDelete.addEventListener('click', () => this.confirmDelete());
     if (closeDeleteModal) closeDeleteModal.addEventListener('click', () => this.hideDeleteModal());
-
     // 管理员登录相关
     const adminLoginBtn = Utils.getElement('adminLoginBtn');
     const adminLogoutBtn = Utils.getElement('adminLogoutBtn');
     const submitAdminLogin = Utils.getElement('submitAdminLogin');
     const closeAdminLogin = Utils.getElement('closeAdminLogin');
     const cancelAdminLogin = Utils.getElement('cancelAdminLogin');
-
     if (adminLoginBtn) {
       adminLoginBtn.addEventListener('click', () => this.showAdminLoginModal());
     }
-
     if (adminLogoutBtn) {
       adminLogoutBtn.addEventListener('click', () => this.adminLogout());
     }
-
     if (submitAdminLogin) {
       submitAdminLogin.addEventListener('click', () => this.handleAdminLogin());
     }
-
     if (closeAdminLogin) {
       closeAdminLogin.addEventListener('click', () => this.hideAdminLoginModal());
     }
-
     if (cancelAdminLogin) {
       cancelAdminLogin.addEventListener('click', () => this.hideAdminLoginModal());
     }
-
     // 管理员面板按钮
     const exportCommentsAdmin = Utils.getElement('exportCommentsAdmin');
     const refreshStats = Utils.getElement('refreshStats');
-
     if (exportCommentsAdmin) {
       exportCommentsAdmin.addEventListener('click', () => this.exportComments());
     }
-
     if (refreshStats) {
       refreshStats.addEventListener('click', () => this.loadAdminStats());
     }
-
     // 键盘快捷键
     document.addEventListener('keydown', (e) => {
       // Ctrl+Enter 提交评论
@@ -913,7 +868,6 @@ class CommentSystem {
           commentForm.dispatchEvent(new Event('submit', { cancelable: true }));
         }
       }
-
       // ESC 键关闭所有模态框
       if (e.key === 'Escape') {
         this.hideDeleteModal();
@@ -921,13 +875,11 @@ class CommentSystem {
         this.toggleEmojiModal(false);
       }
     });
-
     // 点击模态框外部关闭
     document.addEventListener('click', (e) => {
       const emojiModal = Utils.getElement('emojiModal');
       const deleteModal = Utils.getElement('deleteModal');
       const adminLoginModal = Utils.getElement('adminLoginModal');
-
       if (emojiModal && e.target === emojiModal) {
         this.toggleEmojiModal(false);
       }
@@ -940,10 +892,9 @@ class CommentSystem {
     });
   }
 
-  // 评论处理
+  // ==================== 评论处理 ====================
   async handleCommentSubmit(e) {
     e.preventDefault();
-
     // 安全获取表单元素，避免 null 引用导致脚本中断
     const authorEl = Utils.getElement('authorName');
     const emailEl = Utils.getElement('authorEmail');
@@ -953,32 +904,26 @@ class CommentSystem {
       Utils.showNotification('表单元素缺失，请刷新页面', 'error');
       return;
     }
-
     const authorName = authorEl.value.trim();
     const authorEmail = emailEl ? emailEl.value.trim() : '';
     const content = contentEl.value.trim();
-
     // 验证输入
     if (!authorName || !content) {
       Utils.showNotification('请填写昵称和评论内容', 'error');
       return;
     }
-
     if (authorName.length > CONFIG.MAX_USERNAME_LENGTH) {
       Utils.showNotification(`昵称不能超过${CONFIG.MAX_USERNAME_LENGTH}个字符`, 'error');
       return;
     }
-
     if (content.length > CONFIG.MAX_COMMENT_LENGTH) {
       Utils.showNotification(`评论内容不能超过${CONFIG.MAX_COMMENT_LENGTH}个字符`, 'error');
       return;
     }
-
     if (authorEmail && !Utils.validateEmail(authorEmail)) {
       Utils.showNotification('邮箱格式不正确', 'error');
       return;
     }
-
     const commentData = {
       author: authorName,
       email: authorEmail,
@@ -986,54 +931,50 @@ class CommentSystem {
       device: Utils.getDeviceInfo(),
       mood: '😊'
     };
-
     // 检查是否是管理员
     if (this.supabaseService && this.supabaseService.isAdmin) {
       commentData.isAdmin = true;
     }
-
     // 如果有回复对象
     if (this.currentReplyTo) {
+      const parentComment = this.findCommentInTree(this.currentReplyTo, this.commentsTree);
+      if (parentComment && parentComment.depth >= CONFIG.MAX_NESTING_DEPTH) {
+        Utils.showNotification(`回复层数已达最大限制(${CONFIG.MAX_NESTING_DEPTH}层)`, 'warning');
+        return;
+      }
       commentData.parent_id = this.currentReplyTo;
     }
-
     // 显示提交中状态
     const originalText = submitBtn.textContent;
     submitBtn.textContent = '提交中...';
     submitBtn.disabled = true;
-
     try {
       // 保存到Supabase
       let result;
       if (this.supabaseService && this.supabaseService.isConnected) {
         result = await this.supabaseService.addComment(commentData);
       }
-
       if (result && result.success) {
         // 成功保存到Supabase
         const newComment = {
-          id: result.data.id.toString(),
+          id: result.data.id,
           ...commentData,
-          timestamp: new Date().toISOString(),
-          replies: [],
-          supabase_id: result.data.id,
-          local: false,
-          isAdmin: result.data.is_admin || false
+          created_at: new Date().toISOString(),
+          is_admin: result.data.is_admin || false,
+          parent_id: commentData.parent_id || null,
+          likes: 0,
+          replies: []
         };
-
-        if (this.currentReplyTo) {
-          this.addReply(newComment, this.currentReplyTo);
-          this.cancelReply();
-        } else {
-          this.addComment(newComment);
-        }
-
+        // 添加到评论列表
+        this.comments.push(newComment);
+        // 重新构建树形结构
+        this.commentsTree = this.buildCommentTree(this.comments);
+        this.saveToCache();
+        this.renderComments();
+        // 重置表单
         Utils.getElement('commentForm').reset();
         Utils.showNotification('留言发布成功!', 'success');
-
-        // 重新加载确保数据同步
-        setTimeout(() => this.loadComments(), 500);
-
+        this.cancelReply();
       } else {
         // Supabase失败，保存到本地缓存
         this.saveCommentLocally(commentData);
@@ -1049,65 +990,74 @@ class CommentSystem {
   }
 
   saveCommentLocally(commentData) {
-    const localComment = {
-      id: Utils.generateId(),
-      ...commentData,
-      timestamp: new Date().toISOString(),
-      replies: [],
-      local: true
-    };
-
-    if (this.currentReplyTo) {
-      this.addReply(localComment, this.currentReplyTo);
-      this.cancelReply();
-    } else {
-      this.addComment(localComment);
-    }
-
-    Utils.getElement('commentForm').reset();
-    this.saveToCache();
-    this.renderComments();
-    Utils.showNotification('留言已保存到本地缓存，网络恢复后将自动同步', 'info');
+    // 不再保留本地保存逻辑，提示并重置表单
+    Utils.showNotification('留言未提交，网络不可用时暂不支持本地保存，请稍后重试', 'error');
+    const form = Utils.getElement('commentForm');
+    if (form) form.reset();
+    this.cancelReply();
+    return false;
   }
 
-  addComment(comment) {
-    this.comments.unshift(comment);
-    this.saveToCache();
-    this.renderComments();
-    this.updateCommentsCount();
-  }
-
-  addReply(reply, parentCommentId) {
-    const parentComment = this.findCommentById(parentCommentId);
-    if (parentComment) {
-      if (!parentComment.replies) {
-        parentComment.replies = [];
-      }
-      parentComment.replies.push(reply);
-      this.saveToCache();
-      this.renderComments();
-      this.updateCommentsCount();
-    }
-  }
-
-  // 查找评论
-  findCommentById(id) {
-    for (let comment of this.comments) {
-      if (comment.id === id) return comment;
-      if (comment.replies) {
-        const found = comment.replies.find(reply => reply.id === id);
+  // ==================== 评论查找和渲染 ====================
+  /**
+   * 递归查找评论（新增方法）
+   */
+  findCommentInTree(id, comments = this.commentsTree) {
+    for (let comment of comments) {
+      if (comment.id == id) return comment;
+      if (comment.replies && comment.replies.length > 0) {
+        const found = this.findCommentInTree(id, comment.replies);
         if (found) return found;
       }
     }
     return null;
   }
 
-  // 渲染评论
+  /**
+   * 递归删除评论（新增方法）
+   */
+  deleteCommentFromTree(id, comments = this.commentsTree) {
+    for (let i = 0; i < comments.length; i++) {
+      const comment = comments[i];
+      if (comment.id == id) {
+        // 递归删除所有子回复
+        const deleteReplies = (replies) => {
+          replies.forEach(reply => {
+            // 从主评论列表中删除
+            const index = this.comments.findIndex(c => c.id == reply.id);
+            if (index !== -1) {
+              this.comments.splice(index, 1);
+            }
+            if (reply.replies && reply.replies.length > 0) {
+              deleteReplies(reply.replies);
+            }
+          });
+        };
+        deleteReplies(comment.replies);
+        // 从主评论列表中删除
+        const mainIndex = this.comments.findIndex(c => c.id == id);
+        if (mainIndex !== -1) {
+          this.comments.splice(mainIndex, 1);
+        }
+        // 从树中删除
+        comments.splice(i, 1);
+        return true;
+      }
+      if (comment.replies && comment.replies.length > 0) {
+        const deleted = this.deleteCommentFromTree(id, comment.replies);
+        if (deleted) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 渲染评论树（新增方法）
+   */
   renderComments() {
     const container = Utils.getElement('commentsContainer');
     if (!container) return;
-
-    if (this.comments.length === 0) {
+    if (this.commentsTree.length === 0) {
       container.innerHTML = `
         <div class="no-comments">
           <p>暂无留言，快来抢沙发吧！</p>
@@ -1119,36 +1069,36 @@ class CommentSystem {
       this.updateCommentsCount();
       return;
     }
-
-    container.innerHTML = this.comments.map(comment => this.renderComment(comment)).join('');
+    container.innerHTML = this.commentsTree.map(comment => this.renderComment(comment)).join('');
     this.updateCommentsCount();
     this.attachCommentEvents();
   }
 
-  renderComment(comment, isReply = false) {
-    const time = Utils.formatTime(comment.timestamp);
-    const repliesHtml = comment.replies && comment.replies.length > 0
-      ? `<div class="comment-replies">${
-          comment.replies.map(reply => this.renderComment(reply, true)).join('')
-        }</div>`
-      : '';
-
+  /**
+   * 递归渲染单个评论（修改后的方法）
+   */
+  renderComment(comment, depth = 0) {
+    const time = Utils.formatTime(comment.created_at);
     // 管理员标识
-    const adminBadge = comment.isAdmin ? '<span class="admin-badge">站长</span>' : '';
-
+    const adminBadge = comment.is_admin ? '<span class="admin-badge">站长</span>' : '';
     // 本地数据标识
     const localBadge = comment.local ? '<span class="local-badge">本地</span>' : '';
-
     // 删除按钮（管理员模式下显示）
-    const deleteButton = (this.supabaseService && this.supabaseService.isAdmin) 
-      ? `<button class="delete-btn" data-id="${comment.id}" data-is-reply="${isReply}" title="删除留言">🗑️</button>`
+    const deleteButton = (this.supabaseService && this.supabaseService.isAdmin)
+      ? `<button class="delete-btn" data-id="${comment.id}" title="删除留言">🗑️</button>`
       : '';
-
+    // 根据深度计算样式
+    const depthClass = depth > 0 ? 'comment-nested' : '';
+    const depthStyle = depth > 0 ? `style="margin-left: ${depth * 30}px;"` : '';
+    // 渲染子回复
+    const repliesHtml = comment.replies && comment.replies.length > 0
+      ? comment.replies.map(reply => this.renderComment(reply, depth + 1)).join('')
+      : '';
     return `
-      <div class="comment ${isReply ? 'comment-reply' : ''}" data-id="${comment.id}">
+      <div class="comment ${depthClass}" data-id="${comment.id}" data-depth="${depth}" ${depthStyle}>
         <div class="comment-header">
           <div class="comment-author">
-            <div class="author-avatar" style="${comment.isAdmin ? 'background: linear-gradient(135deg, #ff5722, #f57c00);' : ''}">
+            <div class="author-avatar" style="${comment.is_admin ? 'background: linear-gradient(135deg, #ff5722, #f57c00);' : ''}">
               ${comment.author.charAt(0).toUpperCase()}
             </div>
             <div class="author-info">
@@ -1157,9 +1107,10 @@ class CommentSystem {
             </div>
           </div>
           <div class="comment-actions">
-            <button class="reply-btn" data-id="${comment.id}">
-              <span>💬</span> 回复
-            </button>
+            ${depth < CONFIG.MAX_NESTING_DEPTH ? 
+              `<button class="reply-btn" data-id="${comment.id}" data-author="${Utils.escapeHtml(comment.author)}">
+                <span>💬</span> 回复
+              </button>` : ''}
             <button class="like-btn" data-id="${comment.id}">
               <span>❤️</span> ${comment.likes || 0}
             </button>
@@ -1181,7 +1132,7 @@ class CommentSystem {
       .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   }
 
-  // 评论事件绑定
+  // ==================== 评论事件绑定 ====================
   attachCommentEvents() {
     this.attachReplyEvents();
     this.attachLikeEvents();
@@ -1192,7 +1143,8 @@ class CommentSystem {
     document.querySelectorAll('.reply-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const commentId = e.target.closest('.reply-btn').dataset.id;
-        this.setupReply(commentId);
+        const authorName = e.target.closest('.reply-btn').dataset.author;
+        this.setupReply(commentId, authorName);
       });
     });
   }
@@ -1211,43 +1163,36 @@ class CommentSystem {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const commentId = btn.dataset.id;
-        const isReply = btn.dataset.isReply === 'true';
-        this.showDeleteModal(commentId, isReply);
+        this.showDeleteModal(commentId);
       });
     });
   }
 
-  // 回复功能
-  setupReply(commentId) {
-    const comment = this.findCommentById(commentId);
-    if (!comment) return;
-
+  // ==================== 回复功能 ====================
+  setupReply(commentId, authorName) {
     this.currentReplyTo = commentId;
     const replyPreview = Utils.getElement('replyPreview');
     const replyContent = Utils.getElement('replyContent');
-
-    if (replyContent) {
+    // 查找评论内容
+    const comment = this.findCommentInTree(commentId);
+    if (replyContent && comment) {
       replyContent.textContent = comment.content.substring(0, 100) +
         (comment.content.length > 100 ? '...' : '');
     }
-
     if (replyPreview) {
       replyPreview.style.display = 'block';
     }
-
     // 滚动到表单并聚焦
     const commentForm = Utils.getElement('commentForm');
     if (commentForm) {
       commentForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-
     const textarea = Utils.getElement('commentContent');
     if (textarea) {
       textarea.focus();
-      textarea.value = `@${comment.author} `;
+      textarea.value = `@${authorName} `;
     }
-
-    Utils.showNotification(`正在回复 ${comment.author}`, 'info');
+    Utils.showNotification(`正在回复 ${authorName}`, 'info');
   }
 
   cancelReply() {
@@ -1258,13 +1203,11 @@ class CommentSystem {
     }
   }
 
-  // 点赞功能
+  // ==================== 点赞功能 ====================
   async likeComment(commentId) {
-    const comment = this.findCommentById(commentId);
+    const comment = this.findCommentInTree(commentId);
     if (!comment) return;
-
     comment.likes = (comment.likes || 0) + 1;
-
     // 立即更新UI
     const likeBtn = document.querySelector(`.like-btn[data-id="${commentId}"]`);
     if (likeBtn) {
@@ -1274,12 +1217,10 @@ class CommentSystem {
         likeBtn.style.transform = '';
       }, 300);
     }
-
     // 保存到缓存
     this.saveToCache();
-
     // 尝试同步到Supabase
-    if (this.supabaseService && this.supabaseService.isConnected && !comment.local && comment.supabase_id) {
+    if (this.supabaseService && this.supabaseService.isConnected && comment.supabase_id) {
       try {
         await this.supabaseService.updateLikes(parseInt(comment.supabase_id), comment.likes);
         console.log('点赞同步成功');
@@ -1287,11 +1228,10 @@ class CommentSystem {
         console.error('点赞同步失败:', error);
       }
     }
-
     Utils.showNotification('点赞成功！', 'success');
   }
 
-  // 更新评论计数
+  // ==================== 更新评论计数 ====================
   updateCommentsCount() {
     const count = this.getTotalCommentsCount();
     const countElement = Utils.getElement('commentsCount');
@@ -1301,47 +1241,55 @@ class CommentSystem {
   }
 
   getTotalCommentsCount() {
-    let count = this.comments.length;
-    this.comments.forEach(comment => {
-      count += comment.replies ? comment.replies.length : 0;
-    });
-    return count;
+    const countRecursive = (comments) => {
+      let count = 0;
+      comments.forEach(comment => {
+        count++;
+        if (comment.replies && comment.replies.length > 0) {
+          count += countRecursive(comment.replies);
+        }
+      });
+      return count;
+    };
+    return countRecursive(this.commentsTree);
   }
 
-  // 删除功能
-  showDeleteModal(commentId, isReply = false) {
+  // ==================== 删除功能 ====================
+  showDeleteModal(commentId) {
     // 检查是否已登录管理员
     if (!this.supabaseService || !this.supabaseService.isAdmin) {
       Utils.showNotification('请先登录管理员账户', 'error');
       this.showAdminLoginModal();
       return;
     }
-
     this.pendingDeleteId = commentId;
-    this.pendingDeleteIsReply = isReply;
-
-    const comment = this.findCommentById(commentId);
+    const comment = this.findCommentInTree(commentId);
     if (!comment) return;
-
     const deleteModal = Utils.getElement('deleteModal');
     const deleteConfirmText = Utils.getElement('deleteConfirmText');
     const deleteModalTitle = Utils.getElement('deleteModalTitle');
-
     if (!deleteModal || !deleteConfirmText || !deleteModalTitle) return;
-
-    if (isReply) {
-      deleteModalTitle.textContent = '确认删除回复';
-      deleteConfirmText.textContent = `您确定要删除 ${Utils.escapeHtml(comment.author)} 的回复吗？此操作不可撤销。`;
+    
+    // 计算回复数量
+    const countReplies = (replies) => {
+      let count = 0;
+      replies.forEach(reply => {
+        count++;
+        if (reply.replies && reply.replies.length > 0) {
+          count += countReplies(reply.replies);
+        }
+      });
+      return count;
+    };
+    
+    const repliesCount = comment.replies ? countReplies(comment.replies) : 0;
+    deleteModalTitle.textContent = '确认删除留言';
+    if (repliesCount > 0) {
+      deleteConfirmText.textContent = `您确定要删除 ${Utils.escapeHtml(comment.author)} 的留言吗？这将同时删除 ${repliesCount} 条回复。`;
     } else {
-      deleteModalTitle.textContent = '确认删除留言';
-      const repliesCount = comment.replies ? comment.replies.length : 0;
-      if (repliesCount > 0) {
-        deleteConfirmText.textContent = `您确定要删除 ${Utils.escapeHtml(comment.author)} 的主留言吗？这将同时删除 ${repliesCount} 条回复。`;
-      } else {
-        deleteConfirmText.textContent = `您确定要删除 ${Utils.escapeHtml(comment.author)} 的留言吗？此操作不可撤销。`;
-      }
+      deleteConfirmText.textContent = `您确定要删除 ${Utils.escapeHtml(comment.author)} 的留言吗？此操作不可撤销。`;
     }
-
+    
     deleteModal.classList.add('active');
   }
 
@@ -1349,81 +1297,43 @@ class CommentSystem {
     const deleteModal = Utils.getElement('deleteModal');
     if (deleteModal) deleteModal.classList.remove('active');
     this.pendingDeleteId = null;
-    this.pendingDeleteIsReply = false;
   }
 
   async confirmDelete() {
     if (!this.pendingDeleteId) return;
-
-    let success = false;
-    if (this.pendingDeleteIsReply) {
-      success = this.deleteReply(this.pendingDeleteId);
-    } else {
-      success = await this.deleteComment(this.pendingDeleteId);
-    }
-
+    const success = await this.deleteComment(this.pendingDeleteId);
     if (success) {
       Utils.showNotification('删除成功！', 'success');
     } else {
       Utils.showNotification('删除失败，请重试', 'error');
     }
-
     this.hideDeleteModal();
   }
 
   async deleteComment(commentId) {
     try {
-      const comment = this.findCommentById(commentId);
+      const comment = this.findCommentInTree(commentId);
       if (!comment) return false;
-
       // 如果是Supabase评论，从Supabase删除
-      if (comment.supabase_id && this.supabaseService && this.supabaseService.isConnected) {
-        const result = await this.supabaseService.deleteComment(parseInt(comment.supabase_id));
-        
+      if (this.supabaseService && this.supabaseService.isConnected) {
+        const result = await this.supabaseService.deleteComment(parseInt(commentId));
         if (!result.success) {
           console.error('从Supabase删除失败:', result.error);
           Utils.showNotification('云端删除失败，仅删除本地数据', 'error');
         }
       }
-
       // 从本地删除
-      const mainCommentIndex = this.comments.findIndex(c => c.id === commentId);
-      if (mainCommentIndex !== -1) {
-        this.comments.splice(mainCommentIndex, 1);
-        this.saveToCache();
-        this.renderComments();
-        return true;
-      }
-
-      return false;
+      this.deleteCommentFromTree(commentId);
+      this.saveToCache();
+      this.renderComments();
+      return true;
     } catch (error) {
       console.error('删除评论时出错:', error);
       return false;
     }
   }
 
-  deleteReply(replyId) {
-    try {
-      for (let i = 0; i < this.comments.length; i++) {
-        const comment = this.comments[i];
-        if (comment.replies && comment.replies.length > 0) {
-          const replyIndex = comment.replies.findIndex(reply => reply.id === replyId);
-          if (replyIndex !== -1) {
-            comment.replies.splice(replyIndex, 1);
-            this.saveToCache();
-            this.renderComments();
-            return true;
-          }
-        }
-      }
-      return false;
-    } catch (error) {
-      console.error('删除回复时出错:', error);
-      return false;
-    }
-  }
-
-  // 管理员功能
+  // ==================== 管理员功能 ====================
   showAdminLoginModal() {
     const loginModal = Utils.getElement('adminLoginModal');
     if (loginModal) {
@@ -1448,12 +1358,10 @@ class CommentSystem {
     const email = Utils.getElement('adminEmail').value.trim();
     const password = Utils.getElement('adminPassword').value.trim();
     const errorEl = Utils.getElement('loginError');
-
     if (!email || !password) {
       Utils.showNotification('请输入邮箱和密码', 'error');
       return;
     }
-
     const result = await this.supabaseService.adminLogin(email, password);
     
     if (result.success) {
@@ -1502,7 +1410,7 @@ class CommentSystem {
     }
   }
 
-  // 同步到Supabase
+  // ==================== 同步到Supabase ====================
   async syncToSupabase() {
     Utils.showNotification('正在同步数据到Supabase...', 'info');
     
@@ -1516,15 +1424,15 @@ class CommentSystem {
     }
   }
 
-  // 导出功能
+  // ==================== 导出功能 ====================
   exportComments() {
     try {
       const data = {
         exportTime: new Date().toISOString(),
         totalComments: this.getTotalCommentsCount(),
-        comments: this.comments
+        comments: this.comments,
+        commentsTree: this.commentsTree
       };
-
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1534,7 +1442,6 @@ class CommentSystem {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-
       Utils.showNotification('评论数据已导出', 'success');
     } catch (error) {
       console.error('导出失败:', error);
@@ -1542,7 +1449,7 @@ class CommentSystem {
     }
   }
 
-  // 表情选择器
+  // ==================== 表情选择器 ====================
   initEmojiPicker() {
     this.setupEmojiModal();
     this.setupInlineEmoji();
@@ -1553,9 +1460,7 @@ class CommentSystem {
     const closeBtn = Utils.getElement('closeEmojiModal');
     const emojiGrid = Utils.getElement('emojiGrid');
     const categoryBtns = document.querySelectorAll('.emoji-category');
-
     if (!emojiModal || !closeBtn || !emojiGrid) return;
-
     const emojis = {
       smileys: ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳'],
       animals: ['🐵', '🐒', '🦍', '🐶', '🐕', '🐩', '🐺', '🦊', '🦝', '🐱', '🐈', '🦁', '🐯', '🐅', '🐆', '🐴', '🐎', '🦄', '🦓', '🦌', '🐮', '🐂', '🐃', '🐄', '🐷', '🐖', '🐗', '🐽'],
@@ -1564,12 +1469,10 @@ class CommentSystem {
       objects: ['⌚', '📱', '📲', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🖲️', '🕹️', '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', '☎️', '📟', '📠', '📺', '📻'],
       symbols: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❤️‍🔥', '❤️‍🩹', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️', '✝️', '☪️', '🕉️']
     };
-
     const renderEmojiGrid = (category) => {
       emojiGrid.innerHTML = emojis[category].map(emoji => `
         <button class="emoji-item" data-emoji="${emoji}">${emoji}</button>
       `).join('');
-
       emojiGrid.querySelectorAll('.emoji-item').forEach(item => {
         item.addEventListener('click', () => {
           const emoji = item.dataset.emoji;
@@ -1578,10 +1481,8 @@ class CommentSystem {
         });
       });
     };
-
     // 初始渲染
     renderEmojiGrid('smileys');
-
     // 分类切换
     categoryBtns.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1590,7 +1491,6 @@ class CommentSystem {
         renderEmojiGrid(btn.dataset.category);
       });
     });
-
     // 关闭按钮
     closeBtn.addEventListener('click', () => this.toggleEmojiModal(false));
   }
@@ -1598,15 +1498,11 @@ class CommentSystem {
   setupInlineEmoji() {
     const emojiBtn = Utils.getElement('emojiBtn');
     const emojiPicker = Utils.getElement('emojiPicker');
-
     if (!emojiBtn || !emojiPicker) return;
-
     const commonEmojis = ['😀', '😂', '🥰', '😍', '🤔', '👏', '👍', '❤️', '🎉', '🔥', '✨', '🌟', '💯', '🙏', '😊', '😎', '🤗', '😴', '🥳'];
-
     emojiPicker.innerHTML = commonEmojis.map(emoji => `
       <button class="emoji-option" data-emoji="${emoji}">${emoji}</button>
     `).join('');
-
     // 内联表情点击事件
     emojiPicker.querySelectorAll('.emoji-option').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1614,13 +1510,11 @@ class CommentSystem {
         emojiPicker.classList.remove('active');
       });
     });
-
     // 显示/隐藏内联表情选择器
     emojiBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       emojiPicker.classList.toggle('active');
     });
-
     // 点击外部关闭
     document.addEventListener('click', () => {
       emojiPicker.classList.remove('active');
@@ -1630,7 +1524,6 @@ class CommentSystem {
   toggleEmojiModal(show) {
     const emojiModal = Utils.getElement('emojiModal');
     if (!emojiModal) return;
-
     if (typeof show === 'boolean') {
       if (show) {
         emojiModal.classList.add('active');
@@ -1645,7 +1538,6 @@ class CommentSystem {
   insertEmoji(emoji) {
     const textarea = Utils.getElement('commentContent');
     if (!textarea) return;
-
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const text = textarea.value;
@@ -1662,7 +1554,6 @@ class CommentSystem {
 // ============================================================================
 // 联系信息加载器
 // ============================================================================
-
 class ContactInfoLoader {
   constructor() {
     this.contactInfo = {
@@ -1682,10 +1573,8 @@ class ContactInfoLoader {
   loadContactInfo() {
     const contactContainer = Utils.getElement('contactInfo');
     if (!contactContainer) return;
-
     const displayTel = this.obfuscatePhone(this.contactInfo.tel);
     const displayEmail = this.obfuscateEmail(this.contactInfo.email);
-
     contactContainer.innerHTML = `
       <div class="contact-method">
         <div class="contact-icon">📱</div>
@@ -1748,7 +1637,6 @@ class ContactInfoLoader {
 // ============================================================================
 // 主初始化函数
 // ============================================================================
-
 class App {
   constructor() {
     this.isInitialized = false;
@@ -1842,19 +1730,16 @@ class App {
     const welcomeOverlay = Utils.getElement('welcomeOverlay');
     const closeWelcome = Utils.getElement('closeWelcome');
     const mainContent = document.querySelector('.main-content');
-
     if (!welcomeOverlay || !closeWelcome || !mainContent) {
       console.warn('欢迎浮窗元素未找到');
       return;
     }
-
     // 检查保存的设置
     const welcomeShown = localStorage.getItem(CONFIG.STORAGE_KEYS.WELCOME_SHOWN);
     if (welcomeShown === 'true') {
       welcomeOverlay.classList.remove('active');
       mainContent.classList.add('visible');
     }
-
     // 关闭欢迎浮窗
     closeWelcome.addEventListener('click', () => {
       console.log('关闭欢迎浮窗');
@@ -1867,7 +1752,6 @@ class App {
       // 触发自定义事件
       window.dispatchEvent(new CustomEvent('welcomeClosed'));
     });
-
     // 可选：5秒后自动关闭欢迎浮窗
     setTimeout(() => {
       if (welcomeOverlay.classList.contains('active')) {
@@ -1893,12 +1777,10 @@ class App {
         }
       });
     });
-
     // 监听hash变化以高亮当前部分
     window.addEventListener('hashchange', () => {
       this.highlightCurrentSection();
     });
-
     // 初始高亮
     setTimeout(() => this.highlightCurrentSection(), 100);
   }
@@ -1906,7 +1788,6 @@ class App {
   highlightCurrentSection() {
     const hash = window.location.hash;
     if (!hash) return;
-
     document.querySelectorAll('.main-nav a').forEach(link => {
       link.classList.remove('active');
       if (link.getAttribute('href') === hash) {
@@ -1925,7 +1806,6 @@ class App {
           console.log('视频自动播放被阻止:', error);
         });
       }
-
       // 视频错误处理
       bgVideo.addEventListener('error', function() {
         console.error('视频加载失败，请检查文件路径');
@@ -1944,7 +1824,6 @@ class App {
         Utils.showNotification(`发生错误: ${e.error.message}`, 'error');
       }
     });
-
     // 未处理的Promise rejection
     window.addEventListener('unhandledrejection', function(e) {
       console.error('未处理的Promise rejection:', e.reason);
@@ -2079,6 +1958,49 @@ class App {
           color: var(--text-secondary);
           font-size: 1.1rem;
         }
+        
+        /* 多层嵌套评论样式 */
+        .comment-nested {
+          border-left: 2px solid rgba(255, 255, 255, 0.1);
+          padding-left: 20px;
+          margin-top: 15px;
+          transition: all 0.3s ease;
+        }
+        
+        .comment-nested:hover {
+          border-left-color: var(--accent-color);
+        }
+        
+        /* 限制最大缩进 */
+        .comment[data-depth="5"] {
+          margin-left: 120px !important;
+        }
+        
+        .comment[data-depth="6"] {
+          margin-left: 120px !important;
+        }
+        
+        /* 移动端调整 */
+        @media (max-width: 768px) {
+          .comment-nested {
+            margin-left: 10px !important;
+            padding-left: 10px;
+          }
+          
+          .comment[data-depth] {
+            margin-left: 10px !important;
+          }
+          
+          .comment[data-depth="3"] {
+            margin-left: 30px !important;
+          }
+          
+          .comment[data-depth="4"],
+          .comment[data-depth="5"],
+          .comment[data-depth="6"] {
+            margin-left: 40px !important;
+          }
+        }
       `;
       document.head.appendChild(style);
     }
@@ -2088,29 +2010,24 @@ class App {
 // ============================================================================
 // 页面加载完成后的初始化
 // ============================================================================
-
 // DOM加载完成后初始化应用
 document.addEventListener('DOMContentLoaded', function() {
   console.log('DOM 已加载，开始初始化应用...');
-
   // 设置页面标题动态效果
   const originalTitle = document.title;
   let isBlurred = false;
-
   window.addEventListener('blur', () => {
     if (!isBlurred) {
       document.title = '👋 快回来看看 ~ ' + originalTitle;
       isBlurred = true;
     }
   });
-
   window.addEventListener('focus', () => {
     if (isBlurred) {
       document.title = originalTitle;
       isBlurred = false;
     }
   });
-
   // 初始化应用
   window.app = new App();
 });
@@ -2127,6 +2044,7 @@ window.addEventListener('load', function() {
 // 页面关闭前保存数据
 window.addEventListener('beforeunload', function(e) {
   // 可以在这里添加数据保存逻辑
+
 });
 
 // 添加到全局对象，方便调试
