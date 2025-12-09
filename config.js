@@ -18,7 +18,6 @@ const TABLE_NAMES = {
 function initSupabase() {
   if (!SUPABASE_CONFIG.url || !SUPABASE_CONFIG.anonKey) {
     console.error('Supabase配置不完整，请检查supabase-config.js');
-    Utils.showNotification('Supabase配置错误，请检查配置文件', 'error');
     return null;
   }
   
@@ -29,12 +28,13 @@ function initSupabase() {
       {
         auth: {
           autoRefreshToken: true,
-          persistSession: false, // 禁用持久化，避免 Tracking Prevention 阻止 storage 访问（开发时使用）
+          persistSession: false,
           detectSessionInUrl: true
         },
         global: {
           headers: {
-            'Content-Type': 'application/json'
+            // 明确 charset 以减少兼容性警告（注意：服务端也应正确返回 Content-Type）
+            'Content-Type': 'application/json; charset=utf-8'
           }
         }
       }
@@ -44,7 +44,6 @@ function initSupabase() {
     return client;
   } catch (error) {
     console.error('Supabase客户端初始化失败:', error);
-    Utils.showNotification('Supabase初始化失败', 'error');
     return null;
   }
 }

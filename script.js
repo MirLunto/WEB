@@ -1690,6 +1690,7 @@ class App {
   constructor() {
     this.isInitialized = false;
     this.supabaseService = null;
+    this.cmsBindingsInitialized = false; // 新增：标记 CMS 绑定是否已初始化
     this.init();
   }
 
@@ -1747,6 +1748,44 @@ class App {
   initModules() {
     // 初始化联系信息加载器
     new ContactInfoLoader();
+
+    // 加载项目与文章到前端（普通用户也能看到）
+    if (this.supabaseService) {
+      this.loadProjects();
+      this.loadArticles();
+    }
+
+    // 绑定 CMS 弹窗的关闭事件（只绑定一次）
+    if (!this.cmsBindingsInitialized) {
+      this.setupCmsBindings();
+      this.cmsBindingsInitialized = true;
+    }
+  }
+ 
+  // 绑定 CMS 弹窗的关闭按钮/遮罩/ESC 行为
+  setupCmsBindings() {
+    // 顶部关闭按钮
+    const topClose = document.getElementById('cmsModalClose');
+    if (topClose) topClose.addEventListener('click', (e) => { e.stopPropagation(); this.closeCmsModal(); });
+    // 底部关闭按钮（兼容 id cmsCloseBtn）
+    const bottomClose = document.getElementById('cmsCloseBtn');
+    if (bottomClose) bottomClose.addEventListener('click', (e) => { e.stopPropagation(); this.closeCmsModal(); });
+    // 遮罩点击关闭（只当点击到遮罩时）
+    document.addEventListener('click', (e) => {
+      const modal = document.getElementById('cmsModal');
+      if (!modal) return;
+      // 仅当点击的是遮罩本身才关闭
+      if (e.target === modal) this.closeCmsModal();
+    });
+    // ESC 关闭（补充现有 ESC 处理）
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const modal = document.getElementById('cmsModal');
+        if (modal && modal.classList.contains('active')) {
+          this.closeCmsModal();
+        }
+      }
+    });
   }
 
   updateLoginUI() {
@@ -2055,7 +2094,7 @@ class App {
     }
   }
 
-  // 从 Supabase 加载项目并渲染到页面（覆盖静态项）
+   // 从 Supabase 加载项目并渲染到页面（覆盖静态项）
   async loadProjects() {
     try {
       const svc = this.supabaseService || (typeof getSupabaseService === 'function' ? getSupabaseService() : null);
@@ -2070,7 +2109,13 @@ class App {
             ${p.tags ? `<span class="project-tag">${Utils.escapeHtml(p.tags)}</span>` : ''}
             ${p.link ? `<a class="project-link" href="${Utils.escapeHtml(p.link)}" target="_blank" rel="noopener">查看</a>` : ''}
           </div>
-        `).join('');
+        `).join(''); // 必须 join() 将数组转为字符串并结束模板
+
+        // 绑定点击打开查看（普通用户）
+        container.querySelectorAll('.project-item').forEach(el => {
+          el.style.cursor = 'pointer';
+          el.addEventListener('click', () => this.openCmsViewer('projects', el.dataset.id, false));
+        });
       } else {
         // 保持现有静态内容或显示空
         console.warn('loadProjects: 无数据或获取失败', res && res.error);
@@ -2098,12 +2143,167 @@ class App {
             </div>
           </article>
         `).join('');
+        // 绑定点击事件以打开查看弹窗（普通用户查看）
+        container.querySelectorAll('.article-item').forEach(el => {
+          el.style.cursor = 'pointer';
+          el.addEventListener('click', () => this.openCmsViewer('articles', el.dataset.id, false));
+        });
       } else {
         console.warn('loadArticles: 无数据或获取失败', res && res.error);
       }
     } catch (err) {
       console.error('loadArticles 异常:', err);
     }
+  }
+
+  // 打开查看/编辑弹窗（editable: 管理员可编辑）
+  async openCmsViewer(type, id, editable = false) {
+    try {
+      const svc = this.supabaseService || (typeof getSupabaseService === 'function' ? getSupabaseService() : null);
+      if (!svc) return;
+      let res;
+      if (type === 'projects') res = await svc.getProjectById(id);
+      else res = await svc.getArticleById(id);
+
+      console.log('openCmsViewer: loaded item =>', res && res.data);
+
+      if (!res || !res.success) {
+        Utils.showNotification('加载内容失败', 'error');
+        return;
+      }
+
+      const item = res.data || {};
+      // 填充到 modal
+      document.getElementById('cmsModalTitle').textContent = editable ? '编辑' : '查看';
+      const fldTitle = document.getElementById('cmsFieldTitle');
+      const fldTags = document.getElementById('cmsFieldTags');
+      const fldBody = document.getElementById('cmsFieldBody');
+      const fldPub = document.getElementById('cmsFieldPublished');
+      if (fldTitle) fldTitle.value = item.title || '';
+      if (fldTags) fldTags.value = item.tags || '';
+      if (fldBody) fldBody.value = item.description || item.content || '';
+      // 显式设置 checkbox（避免 undefined 行为）
+      if (fldPub) fldPub.checked = !!(item.published === true || item.published === 't' || item.published === 'true');
+      console.log('openCmsViewer: published value from DB =>', item.published);
+      if (fldPub) fldPub.checked = !!item.published;
+
+      // 控制编辑权限：若不可编辑则禁用输入
+      const inputs = [fldTitle, fldTags, /*fldLink,*/ fldBody, fldPub];
+      inputs.forEach(i => { if (i) i.disabled = !editable; });
+
+      // cmsSaveBtn 显示/隐藏
+      const saveBtn = document.getElementById('cmsSaveBtn');
+      if (saveBtn) {
+        saveBtn.style.display = editable ? 'inline-block' : 'none';
+        // 绑定保存操作（覆盖旧绑定）
+        saveBtn.onclick = async () => {
+          await this.saveCmsModal(type, id);
+        };
+      }
+
+      // 打开 modal
+      const modal = document.getElementById('cmsModal');
+      if (modal) {
+        modal.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+    } catch (err) {
+      console.error('openCmsViewer 错误:', err);
+    }
+  }
+
+  // 打开编辑器（新建或编辑）
+  async openCmsEditor(type, id = null) {
+    // 如果新建 id 为 null，editable 为 true
+    if (!this.supabaseService || !this.supabaseService.isAdmin) {
+      Utils.showNotification('需要管理员权限', 'error');
+      return;
+    }
+    if (id) {
+      await this.openCmsViewer(type, id, true);
+    } else {
+      // 清空 modal 并置为编辑模式
+      document.getElementById('cmsModalTitle').textContent = '新建';
+      const fldTitle = document.getElementById('cmsFieldTitle');
+      const fldTags = document.getElementById('cmsFieldTags');
+      const fldBody = document.getElementById('cmsFieldBody');
+      const fldPub = document.getElementById('cmsFieldPublished');
+      [fldTitle, fldTags, /*fldLink,*/ fldBody].forEach(i => { if (i) i.value = ''; });
+      if (fldPub) fldPub.checked = true;
+      [fldTitle, fldTags, /*fldLink,*/ fldBody, fldPub].forEach(i => { if (i) i.disabled = false; });
+
+      const saveBtn = document.getElementById('cmsSaveBtn');
+      if (saveBtn) {
+        saveBtn.style.display = 'inline-block';
+        saveBtn.onclick = async () => {
+          await this.saveCmsModal(type, null);
+        };
+      }
+      const modal = document.getElementById('cmsModal');
+      if (modal) {
+        modal.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+    }
+  }
+
+  // 保存 modal 中的内容（新增/更新）
+  async saveCmsModal(type, id = null) {
+    try {
+      const svc = this.supabaseService || (typeof getSupabaseService === 'function' ? getSupabaseService() : null);
+      if (!svc || !this.supabaseService.isAdmin) {
+        Utils.showNotification('需要管理员权限', 'error');
+        return;
+      }
+      const fldTitle = document.getElementById('cmsFieldTitle');
+      const fldTags = document.getElementById('cmsFieldTags');
+      const fldBody = document.getElementById('cmsFieldBody');
+      const fldPub = document.getElementById('cmsFieldPublished');
+
+      const payload = {
+        title: fldTitle ? fldTitle.value.trim() : '',
+        tags: fldTags ? fldTags.value.trim() : '',
+        description: fldBody ? fldBody.value.trim() : '',
+        content: fldBody ? fldBody.value.trim() : '',
+        published: fldPub ? !!fldPub.checked : true
+      };
+
+      console.log('saveCmsModal: payload ->', payload, 'id=', id, 'type=', type);
+      if (!payload.title) {
+        Utils.showNotification('标题不能为空', 'error');
+        return;
+      }
+
+      let result;
+      if (id) {
+        if (type === 'projects') result = await svc.updateProject(id, { title: payload.title, description: payload.description, tags: payload.tags });
+        else result = await svc.updateArticle(id, { title: payload.title, content: payload.content, excerpt: payload.description, tags: payload.tags, published: payload.published });
+        Utils.showNotification('更新成功', 'success');
+      } else {
+        if (type === 'projects') result = await svc.addProject({ title: payload.title, description: payload.description, tags: payload.tags });
+        else result = await svc.addArticle({ title: payload.title, content: payload.content, excerpt: payload.description, tags: payload.tags, published: payload.published });
+        Utils.showNotification('创建成功', 'success');
+      }
+
+      console.log('saveCmsModal: service result ->', result);
+      // 关闭 modal 并刷新页面模块
+      this.closeCmsModal();
+      if (typeof this.loadProjects === 'function') await this.loadProjects();
+      if (typeof this.loadArticles === 'function') await this.loadArticles();
+    } catch (err) {
+      console.error('saveCmsModal 错误:', err);
+      Utils.showNotification('保存失败', 'error');
+    }
+  }
+
+  closeCmsModal() {
+    const modal = document.getElementById('cmsModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
+    // 清理 save 按钮绑定
+    const saveBtn = document.getElementById('cmsSaveBtn');
+    if (saveBtn) saveBtn.onclick = null;
   }
 }
 

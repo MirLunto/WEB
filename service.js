@@ -535,6 +535,38 @@ class SupabaseService {
       return { success: false, error: err.message };
     }
   }
+
+  // 获取单个项目
+  async getProjectById(id) {
+    try {
+      const { data, error } = await this.client
+        .from(TABLE_NAMES.projects)
+        .select('*')
+        .eq('id', Number(id))
+        .maybeSingle();
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err) {
+      console.error('getProjectById 失败:', err);
+      return { success: false, error: err.message || err };
+    }
+  }
+
+  // 获取单个文章
+  async getArticleById(id) {
+    try {
+      const { data, error } = await this.client
+        .from(TABLE_NAMES.articles)
+        .select('*')
+        .eq('id', Number(id))
+        .maybeSingle();
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err) {
+      console.error('getArticleById 失败:', err);
+      return { success: false, error: err.message || err };
+    }
+  }
 }
 
 // 创建单例并导出

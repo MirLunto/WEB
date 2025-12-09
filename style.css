@@ -95,6 +95,7 @@ body {
         rgba(10, 10, 26, 0.6) 0%,
         rgba(79, 195, 247, 0.1) 50%,
         rgba(10, 10, 26, 0.6) 100%);
+    -webkit-backdrop-filter: blur(2px);
     backdrop-filter: blur(2px);
 }
 
@@ -1369,6 +1370,110 @@ body {
     font-size: 0.7rem;
     margin-left: 5px;
     vertical-align: middle;
+}
+
+/* CMS 毛玻璃弹窗 */
+.cms-modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 4000;
+  background: rgba(0,0,0,0.4);
+}
+.cms-modal.active { display: flex; }
+
+.cms-modal-content {
+  width: min(900px, 95%);
+  max-height: 90vh;
+  overflow: auto;
+  border-radius: 14px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+}
+
+.cms-modal-content.glass {
+  background: rgba(255,255,255,0.06);
+  backdrop-filter: blur(12px) saturate(120%);
+  color: var(--text-color);
+}
+
+.cms-modal-header, .cms-modal-footer {
+  padding: 12px 18px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.cms-modal-body {
+  padding: 18px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.cms-input {
+  width:100%;
+  padding:10px 12px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-color);
+}
+
+.cms-textarea {
+  min-height:240px;
+  resize:vertical;
+  padding:12px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-color);
+}
+
+.cms-row { display:flex; align-items:center; gap:8px; color:var(--text-secondary); }
+
+/* Admin CMS 列表样式优化 */
+.cms-item {
+  background: linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255,255,255,0.04);
+  padding: 12px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cms-item:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+.cms-item .cms-meta {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.cms-item .cms-body {
+  color: var(--text-secondary);
+  max-height: 3.6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 编辑/删除按钮风格 */
+.cms-item button.cms-edit-btn,
+.cms-item button.cms-delete-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.02);
+  color: var(--text-color);
+  cursor: pointer;
 }
 
 /* 响应式设计 */
