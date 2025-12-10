@@ -416,6 +416,20 @@ class SearchEngine {
     this.collectSearchData();
     this.setupEventListeners();
     this.setupKeyboardShortcuts();
+
+    // 监听页面动态内容更新（由 loadProjects/loadArticles 派发）
+    window.addEventListener('contentUpdated', (e) => {
+      // 延迟一点以确保 DOM 完全渲染（防止 race）
+      setTimeout(() => {
+        this.collectSearchData();
+        console.log('SearchEngine: contentUpdated -> 重新索引 DOM', e && e.detail);
+      }, 120);
+    });
+
+    // 另外在 App 完成延迟组件初始化后也可能需要一次索引
+    window.addEventListener('welcomeClosed', () => {
+      setTimeout(() => this.collectSearchData(), 200);
+    });
   }
 
   collectSearchData() {
@@ -423,8 +437,8 @@ class SearchEngine {
     const contentElements = document.querySelectorAll(selectors);
     this.searchData = Array.from(contentElements)
       .filter(el => {
-        const text = el.textContent.trim();
-        return text.length > 20 &&
+        const text = (el.textContent || '').trim();
+        return text.length > 5 &&
           !el.classList.contains('search-suggestion-item') &&
           !el.classList.contains('result-item');
       })
@@ -432,11 +446,11 @@ class SearchEngine {
         element: el,
         text: el.textContent.trim(),
         tag: el.tagName.toLowerCase(),
-        id: el.id || null,
+        id: el.id || (el.dataset && (el.dataset.id ? (el.tagName.toLowerCase() === 'article' ? `article-${el.dataset.id}` : `project-${el.dataset.id}`) : null)) || null,
         className: el.className || '',
         dataTags: el.dataset.tags || ''
       }));
-    console.log(`已索引 ${this.searchData.length} 个内容元素`);
+    console.log(`SearchEngine: 已索引 ${this.searchData.length} 个内容元素`);
   }
 
   setupEventListeners() {
@@ -2104,21 +2118,22 @@ class App {
       const res = await svc.getProjects();
       if (res && res.success) {
         container.innerHTML = res.data.map(p => `
-          <div class="project-item" data-id="${p.id}">
+          <div id="project-${p.id}" class="project-item" data-id="${p.id}">
             <h3>${Utils.escapeHtml(p.title || '无标题')}</h3>
             <p>${Utils.escapeHtml(p.description || '')}</p>
             ${p.tags ? `<span class="project-tag">${Utils.escapeHtml(p.tags)}</span>` : ''}
-            ${p.link ? `<a class="project-link" href="${Utils.escapeHtml(p.link)}" target="_blank" rel="noopener">查看</a>` : ''}
           </div>
-        `).join(''); // 必须 join() 将数组转为字符串并结束模板
+        `).join('');
 
         // 绑定点击打开查看（普通用户）
         container.querySelectorAll('.project-item').forEach(el => {
           el.style.cursor = 'pointer';
           el.addEventListener('click', () => this.openCmsViewer('projects', el.dataset.id, false));
         });
+
+        // 告知其它组件（例如 SearchEngine）内容已更新
+        window.dispatchEvent(new CustomEvent('contentUpdated', { detail: { type: 'projects' } }));
       } else {
-        // 保持现有静态内容或显示空
         console.warn('loadProjects: 无数据或获取失败', res && res.error);
       }
     } catch (err) {
@@ -2135,7 +2150,7 @@ class App {
       const res = await svc.getArticles(100, 0, true); // 仅拉取 published = true
       if (res && res.success) {
         container.innerHTML = res.data.map(a => `
-          <article class="article-item" data-id="${a.id}" data-tags="${Utils.escapeHtml(a.tags || '')}">
+          <article id="article-${a.id}" class="article-item" data-id="${a.id}" data-tags="${Utils.escapeHtml(a.tags || '')}">
             <h3>${Utils.escapeHtml(a.title || '无标题')}</h3>
             <p>${Utils.escapeHtml((a.excerpt || a.content || '').slice(0, 180))}${(a.content||'').length>180? '...':''}</p>
             <div class="article-meta">
@@ -2149,6 +2164,9 @@ class App {
           el.style.cursor = 'pointer';
           el.addEventListener('click', () => this.openCmsViewer('articles', el.dataset.id, false));
         });
+
+        // 通知内容已更新（SearchEngine 监听此事件并重新索引）
+        window.dispatchEvent(new CustomEvent('contentUpdated', { detail: { type: 'articles' } }));
       } else {
         console.warn('loadArticles: 无数据或获取失败', res && res.error);
       }
