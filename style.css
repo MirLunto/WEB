@@ -1392,6 +1392,14 @@ body {
   padding: 0;
   border: 1px solid rgba(255,255,255,0.08);
   box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  transform: translateY(12px) scale(.98);
+  opacity: 0;
+  transition: transform 220ms ease, opacity 220ms ease;
+}
+
+.cms-modal-content.opening {
+  transform: translateY(0) scale(1);
+  opacity: 1;
 }
 
 .cms-modal-content.glass {
@@ -1422,6 +1430,8 @@ body {
   border:1px solid rgba(255,255,255,0.06);
   background: rgba(255,255,255,0.03);
   color: var(--text-color);
+  font-size: 1.05rem;
+  line-height: 1.6;
 }
 
 .cms-textarea {
@@ -1432,6 +1442,8 @@ body {
   border:1px solid rgba(255,255,255,0.06);
   background: rgba(255,255,255,0.03);
   color: var(--text-color);
+  font-size: 1.05rem;
+  line-height: 1.6;
 }
 
 .cms-row { display:flex; align-items:center; gap:8px; color:var(--text-secondary); }

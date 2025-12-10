@@ -1764,26 +1764,27 @@ class App {
  
   // 绑定 CMS 弹窗的关闭按钮/遮罩/ESC 行为
   setupCmsBindings() {
-    // 顶部关闭按钮
+    // 防止重复绑定
+    if (this._cmsBindingsDone) return;
+    this._cmsBindingsDone = true;
+
     const topClose = document.getElementById('cmsModalClose');
     if (topClose) topClose.addEventListener('click', (e) => { e.stopPropagation(); this.closeCmsModal(); });
-    // 底部关闭按钮（兼容 id cmsCloseBtn）
     const bottomClose = document.getElementById('cmsCloseBtn');
     if (bottomClose) bottomClose.addEventListener('click', (e) => { e.stopPropagation(); this.closeCmsModal(); });
-    // 遮罩点击关闭（只当点击到遮罩时）
+
+    // 遮罩点击关闭（只当点击到遮罩本身）
     document.addEventListener('click', (e) => {
       const modal = document.getElementById('cmsModal');
       if (!modal) return;
-      // 仅当点击的是遮罩本身才关闭
       if (e.target === modal) this.closeCmsModal();
     });
-    // ESC 关闭（补充现有 ESC 处理）
+
+    // ESC 关闭
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         const modal = document.getElementById('cmsModal');
-        if (modal && modal.classList.contains('active')) {
-          this.closeCmsModal();
-        }
+        if (modal && modal.classList.contains('active')) this.closeCmsModal();
       }
     });
   }
@@ -2165,56 +2166,68 @@ class App {
       if (type === 'projects') res = await svc.getProjectById(id);
       else res = await svc.getArticleById(id);
 
-      console.log('openCmsViewer: loaded item =>', res && res.data);
-
       if (!res || !res.success) {
         Utils.showNotification('加载内容失败', 'error');
         return;
       }
 
       const item = res.data || {};
-      // 填充到 modal
       document.getElementById('cmsModalTitle').textContent = editable ? '编辑' : '查看';
       const fldTitle = document.getElementById('cmsFieldTitle');
       const fldTags = document.getElementById('cmsFieldTags');
       const fldBody = document.getElementById('cmsFieldBody');
       const fldPub = document.getElementById('cmsFieldPublished');
+
       if (fldTitle) fldTitle.value = item.title || '';
       if (fldTags) fldTags.value = item.tags || '';
       if (fldBody) fldBody.value = item.description || item.content || '';
-      // 显式设置 checkbox（避免 undefined 行为）
+      // 显式设置 checkbox
       if (fldPub) fldPub.checked = !!(item.published === true || item.published === 't' || item.published === 'true');
-      console.log('openCmsViewer: published value from DB =>', item.published);
-      if (fldPub) fldPub.checked = !!item.published;
 
-      // 控制编辑权限：若不可编辑则禁用输入
-      const inputs = [fldTitle, fldTags, /*fldLink,*/ fldBody, fldPub];
+      // 控制输入可用性
+      const inputs = [fldTitle, fldTags, fldBody, fldPub];
       inputs.forEach(i => { if (i) i.disabled = !editable; });
 
-      // cmsSaveBtn 显示/隐藏
+      // 绑定并替换保存处理（使用 addEventListener，打开时绑定，关闭时解绑）
       const saveBtn = document.getElementById('cmsSaveBtn');
       if (saveBtn) {
-        saveBtn.style.display = editable ? 'inline-block' : 'none';
-        // 绑定保存操作（覆盖旧绑定）
-        saveBtn.onclick = async () => {
+        // 解绑旧处理
+        if (this._cmsSaveHandler) saveBtn.removeEventListener('click', this._cmsSaveHandler);
+        // 新的处理（确保在执行时重新验证 session/admin）
+        this._cmsSaveHandler = async (evt) => {
+          evt && evt.preventDefault && evt.preventDefault();
+          // 重新确认会话/管理员状态，避免切后台导致 state 失效
+          if (svc && typeof svc.checkSession === 'function') await svc.checkSession();
+          if (!svc || !svc.isAdmin) {
+            Utils.showNotification('需要管理员权限或登录已过期，请重新登录', 'error');
+            return;
+          }
           await this.saveCmsModal(type, id);
         };
+        saveBtn.addEventListener('click', this._cmsSaveHandler);
+        saveBtn.style.display = editable ? 'inline-block' : 'none';
       }
 
-      // 打开 modal
+      // 打开 modal 并触发动画类
       const modal = document.getElementById('cmsModal');
+      const content = modal ? modal.querySelector('.cms-modal-content') : null;
       if (modal) {
         modal.classList.add('active');
         modal.setAttribute('aria-hidden', 'false');
+        // 强制重绘以触发 CSS 动画（确保过渡从初始态开始）
+        if (content) {
+          content.classList.remove('opening');
+          // 下一帧添加类
+          requestAnimationFrame(() => content.classList.add('opening'));
+        }
       }
     } catch (err) {
       console.error('openCmsViewer 错误:', err);
     }
   }
 
-  // 打开编辑器（新建或编辑）
+  // openCmsEditor 保持一致：新建时也绑定保存处理
   async openCmsEditor(type, id = null) {
-    // 如果新建 id 为 null，editable 为 true
     if (!this.supabaseService || !this.supabaseService.isAdmin) {
       Utils.showNotification('需要管理员权限', 'error');
       return;
@@ -2222,27 +2235,44 @@ class App {
     if (id) {
       await this.openCmsViewer(type, id, true);
     } else {
-      // 清空 modal 并置为编辑模式
       document.getElementById('cmsModalTitle').textContent = '新建';
       const fldTitle = document.getElementById('cmsFieldTitle');
       const fldTags = document.getElementById('cmsFieldTags');
       const fldBody = document.getElementById('cmsFieldBody');
       const fldPub = document.getElementById('cmsFieldPublished');
-      [fldTitle, fldTags, /*fldLink,*/ fldBody].forEach(i => { if (i) i.value = ''; });
+      [fldTitle, fldTags, fldBody].forEach(i => { if (i) i.value = ''; });
       if (fldPub) fldPub.checked = true;
-      [fldTitle, fldTags, /*fldLink,*/ fldBody, fldPub].forEach(i => { if (i) i.disabled = false; });
+      [fldTitle, fldTags, fldBody, fldPub].forEach(i => { if (i) i.disabled = false; });
 
+      // 绑定保存（与 openCmsViewer 相同逻辑）
       const saveBtn = document.getElementById('cmsSaveBtn');
       if (saveBtn) {
-        saveBtn.style.display = 'inline-block';
-        saveBtn.onclick = async () => {
+        if (this._cmsSaveHandler) saveBtn.removeEventListener('click', this._cmsSaveHandler);
+        this._cmsSaveHandler = async (evt) => {
+          evt && evt.preventDefault && evt.preventDefault();
+          // 再次确认 session/admin
+          if (this.supabaseService && typeof this.supabaseService.checkSession === 'function') {
+            await this.supabaseService.checkSession();
+          }
+          if (!this.supabaseService || !this.supabaseService.isAdmin) {
+            Utils.showNotification('需要管理员权限或登录已过期，请重新登录', 'error');
+            return;
+          }
           await this.saveCmsModal(type, null);
         };
+        saveBtn.addEventListener('click', this._cmsSaveHandler);
+        saveBtn.style.display = 'inline-block';
       }
+
       const modal = document.getElementById('cmsModal');
+      const content = modal ? modal.querySelector('.cms-modal-content') : null;
       if (modal) {
         modal.classList.add('active');
         modal.setAttribute('aria-hidden', 'false');
+        if (content) {
+          content.classList.remove('opening');
+          requestAnimationFrame(() => content.classList.add('opening'));
+        }
       }
     }
   }
@@ -2251,10 +2281,13 @@ class App {
   async saveCmsModal(type, id = null) {
     try {
       const svc = this.supabaseService || (typeof getSupabaseService === 'function' ? getSupabaseService() : null);
-      if (!svc || !this.supabaseService.isAdmin) {
-        Utils.showNotification('需要管理员权限', 'error');
+      // 确保再次刷新 session 状态
+      if (svc && typeof svc.checkSession === 'function') await svc.checkSession();
+      if (!svc || !svc.isAdmin) {
+        Utils.showNotification('需要管理员权限或登录已过期，请重新登录', 'error');
         return;
       }
+
       const fldTitle = document.getElementById('cmsFieldTitle');
       const fldTags = document.getElementById('cmsFieldTags');
       const fldBody = document.getElementById('cmsFieldBody');
@@ -2276,20 +2309,28 @@ class App {
 
       let result;
       if (id) {
-        if (type === 'projects') result = await svc.updateProject(id, { title: payload.title, description: payload.description, tags: payload.tags });
+        if (type === 'projects') result = await svc.updateProject(id, { title: payload.title, description: payload.description, tags: payload.tags, published: payload.published });
         else result = await svc.updateArticle(id, { title: payload.title, content: payload.content, excerpt: payload.description, tags: payload.tags, published: payload.published });
         Utils.showNotification('更新成功', 'success');
       } else {
-        if (type === 'projects') result = await svc.addProject({ title: payload.title, description: payload.description, tags: payload.tags });
+        if (type === 'projects') result = await svc.addProject({ title: payload.title, description: payload.description, tags: payload.tags, published: payload.published });
         else result = await svc.addArticle({ title: payload.title, content: payload.content, excerpt: payload.description, tags: payload.tags, published: payload.published });
         Utils.showNotification('创建成功', 'success');
       }
 
       console.log('saveCmsModal: service result ->', result);
-      // 关闭 modal 并刷新页面模块
       this.closeCmsModal();
       if (typeof this.loadProjects === 'function') await this.loadProjects();
       if (typeof this.loadArticles === 'function') await this.loadArticles();
+
+      // 通知 admin-cms 或其他监听者：内容已变更（create/update）
+      try {
+        window.dispatchEvent(new CustomEvent('cmsContentChanged', {
+          detail: { type: type, id: id || (result && result.data && result.data.id) || null, action: id ? 'update' : 'create' }
+        }));
+      } catch (e) {
+        console.warn('cmsContentChanged 事件派发失败', e);
+      }
     } catch (err) {
       console.error('saveCmsModal 错误:', err);
       Utils.showNotification('保存失败', 'error');
@@ -2301,9 +2342,14 @@ class App {
     if (!modal) return;
     modal.classList.remove('active');
     modal.setAttribute('aria-hidden', 'true');
-    // 清理 save 按钮绑定
+    const content = modal.querySelector('.cms-modal-content');
+    if (content) content.classList.remove('opening');
+    // 解绑保存处理
     const saveBtn = document.getElementById('cmsSaveBtn');
-    if (saveBtn) saveBtn.onclick = null;
+    if (saveBtn && this._cmsSaveHandler) {
+      saveBtn.removeEventListener('click', this._cmsSaveHandler);
+      this._cmsSaveHandler = null;
+    }
   }
 }
 

@@ -161,7 +161,7 @@
         <div class="emoji-modal-content">
             <div class="emoji-modal-header">
                 <h3>选择表情</h3>
-                <button id="closeEmojiModal" class="close-modal">&times;</button>
+                <button id="closeEmojiModal" class="close-modal" title="关闭表情选择器" aria-label="关闭表情选择器">&times;</button>
             </div>
             <div class="emoji-categories">
                 <button class="emoji-category active" data-category="smileys">😊 表情</button>
@@ -180,7 +180,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="deleteModalTitle">确认删除留言</h3>
-                <button id="closeDeleteModal" class="close-modal">&times;</button>
+                <button id="closeDeleteModal" class="close-modal" title="关闭删除提示" aria-label="关闭删除提示">&times;</button>
             </div>
             <div class="modal-body">
                 <p id="deleteConfirmText">您确定要删除这条留言吗？此操作不可撤销。</p>
@@ -197,7 +197,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>管理员登录</h3>
-                <button id="closeAdminLogin" class="close-modal">&times;</button>
+                <button id="closeAdminLogin" class="close-modal" title="关闭管理员登录" aria-label="关闭管理员登录">&times;</button>
             </div>
             <div class="modal-body">
                 <div style="margin-bottom: 15px;">
@@ -224,8 +224,8 @@
 
     <!-- 管理员操作按钮 -->
     <div style="position: fixed; bottom: 20px; left: 20px; z-index: 1000;">
-        <button id="adminLoginBtn" class="admin-login-btn">🔐 管理员登录</button>
-        <button id="adminLogoutBtn" class="admin-logout-btn" style="display: none;">🚪 退出登录</button>
+        <button id="adminLoginBtn" class="admin-login-btn" title="管理员登录" aria-label="管理员登录">🔐 管理员登录</button>
+        <button id="adminLogoutBtn" class="admin-logout-btn" style="display:none;" title="退出登录" aria-label="退出登录">🚪 退出登录</button>
     </div>
 
     <!-- 管理员面板 -->
@@ -264,7 +264,7 @@
       <div class="cms-modal-content glass">
         <div class="cms-modal-header">
           <h3 id="cmsModalTitle">查看</h3>
-          <button id="cmsModalClose" class="close-modal" aria-label="关闭">&times;</button>
+          <button id="cmsModalClose" class="close-modal" aria-label="关闭" title="关闭">&times;</button>
         </div>
         <div class="cms-modal-body">
           <input id="cmsFieldTitle" class="cms-input" placeholder="标题" />
@@ -274,7 +274,7 @@
         </div>
         <div class="cms-modal-footer">
           <button id="cmsSaveBtn" class="submit-btn">保存</button>
-          <button id="cmsCloseBtn" class="btn-secondary">关闭</button>
+          <button id="cmsCloseBtn" class="btn-secondary" title="关闭" aria-label="关闭">关闭</button>
         </div>
       </div>
     </div>
