@@ -2,33 +2,40 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <!-- 移动端视口配置，确保页面自适应设备宽度 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mir-Lunto的私人空间</title>
+    <!-- 引入外部样式表，控制整个页面的视觉风格 -->
     <link rel="stylesheet" href="style.css">
+    <!-- SEO优化：页面描述和关键词 -->
     <meta name="description" content="Mir-Lunto的个人空间，记录思考、项目和创作">
     <meta name="keywords" content="个人空间,博客,项目,前端开发">
-    <!-- 引入Supabase客户端库（修正 URL） -->
+    <!-- 引入Supabase客户端库（修正 URL），用于与后端数据库交互 -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <!-- 加载指示器 -->
+    <!-- ==================== 加载指示器 ==================== -->
+    <!-- 页面数据加载时显示，待资源就绪后由JS隐藏 -->
     <div id="loadingIndicator" class="loading-indicator">
-        <div class="spinner"></div>
+        <div class="spinner"></div>  <!-- 旋转的加载动画 -->
         <p>加载中...</p>
     </div>
 
-    <!-- 视频背景 -->
+    <!-- ==================== 视频背景 ==================== -->
     <div class="video-background">
+        <!-- 自动播放、静音、循环的视频背景，提供沉浸式体验 -->
         <video autoplay muted loop id="bgVideo">
             <source src="assets/fufu.mp4" type="video/mp4">
             您的浏览器不支持视频背景。
         </video>
+        <!-- 半透明遮罩层，使上方文字更清晰可读 -->
         <div class="video-overlay"></div>
     </div>
 
-    <!-- 欢迎浮窗 -->
+    <!-- ==================== 欢迎浮窗（首次访问引导） ==================== -->
+    <!-- 初始显示，用户点击“进入空间”后由JS隐藏，进入主内容 -->
     <div id="welcomeOverlay" class="overlay active">
-        <div class="glass-window">
+        <div class="glass-window">  <!-- 毛玻璃风格弹窗 -->
             <div class="welcome-content">
                 <h2>欢迎回来</h2>
                 <p>来到 Mir-Lunto 的私人空间</p>
@@ -37,26 +44,32 @@
         </div>
     </div>
 
-    <!-- 搜索栏 -->
+    <!-- ==================== 搜索栏 ==================== -->
+    <!-- 搜索文章关键词，支持快捷键Ctrl+K聚焦，显示建议和结果 -->
     <div class="search-container">
         <div class="search-box">
             <input type="text" id="searchInput" placeholder="搜索文章关键词... (Ctrl+K)" autocomplete="off">
             <button id="searchBtn" class="search-button">
+                <!-- 内联SVG搜索图标 -->
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="11" cy="11" r="8"></circle>
                     <path d="m21 21-4.3-4.3"></path>
                 </svg>
             </button>
+            <!-- 搜索建议下拉列表，输入时动态显示 -->
             <div id="searchSuggestions" class="search-suggestions"></div>
         </div>
+        <!-- 搜索结果展示区域 -->
         <div id="searchResults" class="search-results"></div>
     </div>
 
-    <!-- 主内容区域 -->
+    <!-- ==================== 主内容区域 ==================== -->
     <div class="main-content">
+        <!-- 页头：主标题和导航菜单 -->
         <header class="main-header">
             <h1>Mir-Lunto的私人空间</h1>
             <nav class="main-nav">
+                <!-- 锚点链接，点击平滑滚动到对应区块 -->
                 <a href="#about">关于我</a>
                 <a href="#projects">项目</a>
                 <a href="#articles">文章</a>
@@ -66,6 +79,7 @@
         </header>
         
         <main>
+            <!-- 关于我区块（静态内容） -->
             <section id="about" class="content-section">
                 <h2>关于 Mir-Lunto</h2>
                 <p>这里是我的个人空间，记录我的思考、项目和创作...</p>
@@ -75,54 +89,61 @@
                 </div>
             </section>
 
+            <!-- 项目展示区块（动态渲染） -->
             <section id="projects" class="content-section">
                 <h2>我的项目</h2>
-                <!-- 项目列表由后端渲染 -->
+                <!-- 项目列表容器，由JavaScript从Supabase获取数据后动态填充 -->
                 <div class="project-list" aria-live="polite"></div>
              </section>
  
+             <!-- 文章列表区块（动态渲染） -->
              <section id="articles" class="content-section">
                  <h2>我的文章</h2>
-                 <!-- 文章列表由后端渲染 -->
+                 <!-- 文章列表容器，同样由JS动态渲染 -->
                  <div class="articles-list" aria-live="polite"></div>
              </section>
 
+            <!-- 联系信息区块（安全加载） -->
             <section id="contact" class="content-section">
                 <h2>联系我</h2>
+                <!-- 初始显示占位文字，JS后续填充真实联系方式，防止爬虫直接抓取 -->
                 <div class="contact-info" id="contactInfo">
-                    <!-- 联系信息将通过JavaScript安全加载 -->
                     <p>加载联系信息...</p>
                 </div>
             </section>
 
-            <!-- 评论系统 -->
+            <!-- ==================== 评论/留言系统 ==================== -->
             <section class="comments-section" id="comments">
                 <div class="container">
                     <h2>💬 留言区</h2>
                     
-                    <!-- 评论发布表单 -->
+                    <!-- 留言发布表单 -->
                     <div class="comment-form-container">
                         <form id="commentForm" class="comment-form">
                             <div class="form-header">
                                 <h3>发表留言</h3>
                                 <div class="form-actions">
+                                    <!-- 点击打开表情选择器模态框 -->
                                     <button type="button" id="emojiBtn" class="emoji-btn">😊</button>
                                     <button type="submit" id="submitComment" class="submit-btn">发布留言</button>
                                 </div>
                             </div>
                             
                             <div class="form-body">
+                                <!-- 用户信息：昵称必填，邮箱可选 -->
                                 <div class="user-info">
                                     <input type="text" id="authorName" placeholder="您的昵称 (必填)" required maxlength="20">
                                     <input type="email" id="authorEmail" placeholder="邮箱 (可选)">
                                 </div>
                                 
+                                <!-- 评论内容输入区，支持Ctrl+Enter快捷提交 -->
                                 <div class="comment-input-container">
                                     <textarea id="commentContent" placeholder="分享您的想法...（支持Ctrl+Enter快捷提交）" rows="4" required maxlength="500"></textarea>
+                                    <!-- 内嵌表情选择器（可能由JS动态生成内容） -->
                                     <div id="emojiPicker" class="emoji-picker"></div>
                                 </div>
                                 
-                                <!-- 回复引用 -->
+                                <!-- 回复预览：显示正在回复哪条留言，点击取消可清除 -->
                                 <div id="replyPreview" class="reply-preview" style="display: none;">
                                     <div class="reply-header">
                                         <span>回复给：</span>
@@ -134,14 +155,18 @@
                         </form>
                     </div>
                     
-                    <!-- 评论列表 -->
+                    <!-- 留言列表区域 -->
                     <div class="comments-list" id="commentsList">
                         <div class="comments-stats">
+                            <!-- 动态显示留言总数 -->
                             <span id="commentsCount">0</span> 条留言
+                            <!-- 手动同步最新留言数据 -->
                             <button id="syncComments" class="sync-btn">🔄 同步数据</button>
+                            <!-- 导出留言为文件（JSON/CSV） -->
                             <button id="exportComments" class="export-btn">📥 导出留言</button>
                         </div>
                         
+                        <!-- 留言卡片将动态插入此处 -->
                         <div id="commentsContainer" class="comments-container">
                             <div class="loading-comments">加载留言中...</div>
                         </div>
@@ -150,19 +175,22 @@
             </section>
         </main>
 
+        <!-- 页脚：版权与最后更新时间 -->
         <footer class="main-footer">
             <p>&copy; 2024 Mir-Lunto. 保留所有权利。</p>
+            <!-- 最后更新时间由JS动态写入 -->
             <p>最后更新: <span id="lastUpdate"></span></p>
         </footer>
     </div>
 
-    <!-- 表情选择器模态框 -->
+    <!-- ==================== 表情选择器模态框 ==================== -->
     <div id="emojiModal" class="emoji-modal">
         <div class="emoji-modal-content">
             <div class="emoji-modal-header">
                 <h3>选择表情</h3>
                 <button id="closeEmojiModal" class="close-modal" title="关闭表情选择器" aria-label="关闭表情选择器">&times;</button>
             </div>
+            <!-- 表情分类切换按钮 -->
             <div class="emoji-categories">
                 <button class="emoji-category active" data-category="smileys">😊 表情</button>
                 <button class="emoji-category" data-category="animals">🐻 动物</button>
@@ -171,11 +199,13 @@
                 <button class="emoji-category" data-category="objects">💡 物品</button>
                 <button class="emoji-category" data-category="symbols">❤️ 符号</button>
             </div>
+            <!-- 表情网格，根据所选分类动态生成 -->
             <div id="emojiGrid" class="emoji-grid"></div>
         </div>
     </div>
 
-    <!-- 删除确认模态框 -->
+    <!-- ==================== 删除确认模态框 ==================== -->
+    <!-- 管理员删除留言前再次确认，防止误操作 -->
     <div id="deleteModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -192,7 +222,8 @@
         </div>
     </div>
 
-    <!-- 管理员登录模态框 -->
+    <!-- ==================== 管理员登录模态框 ==================== -->
+    <!-- 通过Supabase Auth验证管理员身份 -->
     <div id="adminLoginModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -200,6 +231,7 @@
                 <button id="closeAdminLogin" class="close-modal" title="关闭管理员登录" aria-label="关闭管理员登录">&times;</button>
             </div>
             <div class="modal-body">
+                <!-- 内联样式仅为快速原型，实际由style.css控制 -->
                 <div style="margin-bottom: 15px;">
                     <input type="email" id="adminEmail" placeholder="管理员邮箱" 
                            style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 8px;
@@ -209,6 +241,7 @@
                            style="width: 100%; padding: 10px; border-radius: 8px;
                                   border: 1px solid var(--glass-border); background: var(--secondary-bg);
                                   color: var(--text-color);">
+                    <!-- 登录错误提示信息，默认隐藏 -->
                     <p id="loginError" style="color: #f44336; font-size: 0.8rem; margin-top: 5px; display: none;"></p>
                 </div>
                 <div style="display: flex; gap: 10px;">
@@ -222,23 +255,28 @@
         </div>
     </div>
 
-    <!-- 管理员操作按钮 -->
+    <!-- ==================== 左下角固定操作按钮组 ==================== -->
+    <!-- 管理员登录/登出的快速入口，始终悬浮在页面左下角 -->
     <div style="position: fixed; bottom: 20px; left: 20px; z-index: 1000;">
         <button id="adminLoginBtn" class="admin-login-btn" title="管理员登录" aria-label="管理员登录">🔐 管理员登录</button>
         <button id="adminLogoutBtn" class="admin-logout-btn" style="display:none;" title="退出登录" aria-label="退出登录">🚪 退出登录</button>
     </div>
 
-    <!-- 管理员面板 -->
+    <!-- ==================== 管理员面板 ==================== -->
+    <!-- 登录后显示，包含项目管理入口、留言统计、数据导出等功能 -->
     <div id="adminPanel" class="admin-panel" style="display: none;">
       <h4>👑 管理员面板</h4>
-      <!-- 管理内容编辑器 -->
+      <!-- 内容管理区域 -->
       <div id="adminContentEditor">
         <div style="margin-bottom:12px;">
+          <!-- 点击后弹出CMS编辑器，分别管理项目或文章 -->
           <button id="openProjectsEditor" class="emoji-btn">管理项目</button>
           <button id="openArticlesEditor" class="emoji-btn">管理文章</button>
         </div>
+        <!-- 编辑列表将动态载入此处（如列出所有项目/文章供选择编辑） -->
         <div id="cmsEditorArea"></div>
       </div>
+      <!-- 数据统计卡片 -->
       <div class="admin-stats">
             <div class="stat-item">
                 <div class="stat-value" id="totalCommentsStat">0</div>
@@ -253,13 +291,15 @@
                 <div class="stat-label">今日新增</div>
             </div>
         </div>
+        <!-- 面板内的快捷操作按钮 -->
         <div style="display: flex; gap: 10px; margin-top: 15px;">
             <button id="exportCommentsAdmin" class="emoji-btn" style="flex: 1;">📥 导出数据</button>
             <button id="refreshStats" class="emoji-btn" style="flex: 1;">🔄 刷新统计</button>
         </div>
     </div>
 
-    <!-- CMS 弹窗 DOM -->
+    <!-- ==================== CMS 弹窗（内容管理系统编辑器） ==================== -->
+    <!-- 管理员编辑单个项目或文章时弹出的表单 -->
     <div id="cmsModal" class="cms-modal" aria-hidden="true" role="dialog" aria-modal="true">
       <div class="cms-modal-content glass">
         <div class="cms-modal-header">
@@ -267,9 +307,13 @@
           <button id="cmsModalClose" class="close-modal" aria-label="关闭" title="关闭">&times;</button>
         </div>
         <div class="cms-modal-body">
+          <!-- 标题输入 -->
           <input id="cmsFieldTitle" class="cms-input" placeholder="标题" />
+          <!-- 标签（逗号分隔） -->
           <input id="cmsFieldTags" class="cms-input" placeholder="标签 (逗号分隔)" />
+          <!-- 正文内容 -->
           <textarea id="cmsFieldBody" class="cms-textarea" placeholder="内容"></textarea>
+          <!-- 是否在前台发布显示 -->
           <label class="cms-row"><input type="checkbox" id="cmsFieldPublished" /> 已发布（可见于前端）</label>
         </div>
         <div class="cms-modal-footer">
@@ -279,13 +323,19 @@
       </div>
     </div>
 
-    <!-- 通知容器 -->
+    <!-- ==================== 通知容器 ==================== -->
+    <!-- 用于JavaScript动态插入操作反馈（成功/错误/提示信息） -->
     <div id="notificationContainer"></div>
 
-    <!-- JavaScript文件：顺序重要 -->
+    <!-- ==================== JavaScript文件加载 ==================== -->
+    <!-- 顺序很重要：先加载配置文件，再加载服务层，最后加载业务逻辑 -->
+    <!-- 存放Supabase连接参数和全局常量 -->
     <script src="config.js"></script>
+    <!-- 封装与Supabase交互的API请求（数据库读写、认证等） -->
     <script src="service.js"></script>
+    <!-- 主前端逻辑：页面初始化、事件绑定、动态渲染、交互控制 -->
     <script src="script.js"></script>
+    <!-- 管理员专属功能：登录状态管理、CMS编辑、删除留言、统计刷新 -->
     <script src="admin-cms.js"></script>
 </body>
 </html>
